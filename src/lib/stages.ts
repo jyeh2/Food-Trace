@@ -1,8 +1,8 @@
 export const STAGES = [
-  { id: 1, key: "farm", label: "Farm / Harvest", icon: "🌾" },
-  { id: 2, key: "processing", label: "Processing", icon: "🏭" },
-  { id: 3, key: "distribution", label: "Distribution", icon: "🚚" },
-  { id: 4, key: "retail", label: "Retail", icon: "🏪" },
+  { id: 1, key: "farm", label: "Farm / Harvest" },
+  { id: 2, key: "processing", label: "Processing" },
+  { id: 3, key: "distribution", label: "Distribution" },
+  { id: 4, key: "retail", label: "Retail" },
 ] as const;
 
 export type StageId = (typeof STAGES)[number]["id"];

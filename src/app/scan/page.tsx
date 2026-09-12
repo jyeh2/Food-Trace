@@ -4,19 +4,73 @@ import Link from "next/link";
 import { STAGES } from "@/lib/stages";
 
 type Station = { s: number; c: string };
+type Step = "scan" | "photo" | "details" | "done";
 
-/** Worker app: scan station QR + product QR, take photo, submit. */
+/** Map getUserMedia's DOMException names to plain-language causes. */
+function cameraErrorMessage(e: unknown): string {
+  const name = e instanceof DOMException ? e.name : "";
+  switch (name) {
+    case "NotAllowedError":
+      return "Camera permission was denied. Check your browser's site settings and allow camera access, then try again.";
+    case "NotFoundError":
+    case "OverconstrainedError":
+      return "No camera found on this device.";
+    case "NotReadableError":
+      return "Camera is already in use by another app or browser tab. Close it and try again.";
+    case "SecurityError":
+      return "Camera blocked — this page must be loaded over https:// (or localhost).";
+    default:
+      return `Camera error: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+function CameraIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden>
+      <path
+        d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="13" r="3.25" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
+const STEP_LABELS: { key: Step; label: string }[] = [
+  { key: "scan", label: "Scan" },
+  { key: "photo", label: "Photo" },
+  { key: "details", label: "Details" },
+  { key: "done", label: "Done" },
+];
+
+/** Worker app: scan station QR + product QR, take photo, submit — one full-screen step at a time. */
 export default function ScanPage() {
   const [station, setStation] = useState<Station | null>(null);
   const [batchId, setBatchId] = useState("");
+  const [manualBatch, setManualBatch] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [note, setNote] = useState("");
   const [actor, setActor] = useState("");
   const [scanning, setScanning] = useState(false);
+  const [cameraEnabled, setCameraEnabled] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [lastTx, setLastTx] = useState("");
   const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
+
+  const step: Step =
+    msg?.ok && lastTx
+      ? "done"
+      : !confirmed || !station || !batchId
+        ? "scan"
+        : !photo
+          ? "photo"
+          : "details";
+  const stepIndex = STEP_LABELS.findIndex((s) => s.key === step);
 
   /** Returns which thing was decoded so the scanner knows whether to keep going. */
   function handleDecoded(text: string): "station" | "batch" | null {
@@ -25,7 +79,6 @@ export default function ScanPage() {
       const j = JSON.parse(text);
       if (j?.t === "station" && typeof j.s === "number" && typeof j.c === "string") {
         setStation({ s: j.s, c: j.c });
-        setMsg({ ok: true, text: `Station ${j.s} scanned — now scan the product QR` });
         return "station";
       }
     } catch {
@@ -35,24 +88,28 @@ export default function ScanPage() {
     const m = text.match(/\/verify\/([A-Za-z0-9]+)/) ?? text.match(/^([A-F0-9]{8})$/i);
     if (m) {
       setBatchId(m[1].toUpperCase());
-      setMsg({ ok: true, text: `Batch ${m[1].toUpperCase()} scanned` });
       return "batch";
     }
-    setMsg({ ok: false, text: "Unrecognized QR" });
     return null;
   }
 
   async function startScan() {
-    setScanning(true);
-    const { Html5Qrcode } = await import("html5-qrcode");
-    const inst = new Html5Qrcode("reader");
-    scannerRef.current = inst;
-    // Keep scanning until both station and batch are captured. Debounce so one
-    // QR held in front of the camera doesn't fire repeatedly.
-    let lastText = "";
-    let lastAt = 0;
-    const got = { station: !!station, batch: !!batchId };
+    setMsg(null);
+    // Everything here — including the dynamic import and the Html5Qrcode
+    // constructor, not just inst.start() — must be inside this try block.
+    // Both can throw (e.g. if #reader isn't mounted in the DOM yet), and if
+    // that throw isn't caught, it's an unhandled rejection: nothing shows,
+    // no popup, no error banner, just silence.
     try {
+      const { Html5Qrcode } = await import("html5-qrcode");
+      const inst = new Html5Qrcode("reader");
+      scannerRef.current = inst;
+      setScanning(true);
+      // Keep scanning until both station and batch are captured. Debounce so
+      // one QR held in front of the camera doesn't fire repeatedly.
+      let lastText = "";
+      let lastAt = 0;
+      const got = { station: !!station, batch: !!batchId };
       await inst.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: 240 },
@@ -68,7 +125,7 @@ export default function ScanPage() {
         () => {},
       );
     } catch (e) {
-      setMsg({ ok: false, text: `Camera error: ${e instanceof Error ? e.message : String(e)}` });
+      setMsg({ ok: false, text: cameraErrorMessage(e) });
       setScanning(false);
     }
   }
@@ -82,10 +139,57 @@ export default function ScanPage() {
     setScanning(false);
   }
   useEffect(() => () => void stopScan(), []);
+  // Camera access is gated behind an explicit tap (enableCamera below), both
+  // because iOS Safari requires a user gesture for the first getUserMedia
+  // call, and so it's clear the scan is mandatory rather than a background
+  // permission grab. enableCamera itself does that first start (it's the one
+  // running inside the click). This effect only depends on `step`, not
+  // `cameraEnabled` — it exists purely to restart the camera on later
+  // re-entries into the scan step (e.g. "Scan next"), which happens after
+  // permission is already granted, so no gesture is needed there. If it also
+  // depended on `cameraEnabled`, it would double-fire alongside enableCamera's
+  // own call on the very first tap — two concurrent Html5Qrcode.start() calls
+  // fighting over the same camera, which throws on the second one.
+  useEffect(() => {
+    if (!cameraEnabled) return;
+    if (step === "scan" && !scanning) {
+      const id = requestAnimationFrame(() => void startScan());
+      return () => cancelAnimationFrame(id);
+    }
+    if (step !== "scan" && scanning) void stopScan();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step]);
+
+  async function enableCamera() {
+    // getUserMedia doesn't exist at all in an insecure context (plain http://
+    // on anything but localhost) — check that directly, since html5-qrcode's
+    // own error for this case is a generic "navigator.mediaDevices is
+    // undefined" TypeError that doesn't say why.
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMsg({
+        ok: false,
+        text: "Camera isn't available on this connection — this page must be loaded over https:// (or localhost). If you're on a phone, use the https:// LAN URL from pnpm dev, and accept the certificate warning once.",
+      });
+      return;
+    }
+    setCameraEnabled(true);
+    await startScan();
+  }
 
   function onPhoto(f: File | null) {
     setPhoto(f);
     setPreview(f ? URL.createObjectURL(f) : "");
+  }
+
+  function startOver() {
+    setStation(null);
+    setBatchId("");
+    setManualBatch(false);
+    setConfirmed(false);
+    onPhoto(null);
+    setNote("");
+    setMsg(null);
+    setLastTx("");
   }
 
   async function submit() {
@@ -103,10 +207,8 @@ export default function ScanPage() {
       const r = await fetch("/api/stages", { method: "POST", body: fd });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
-      setMsg({ ok: true, text: `Stage ${station.s} recorded on-chain. tx ${j.stage.tx_sig.slice(0, 12)}…` });
-      setStation(null);
-      onPhoto(null);
-      setNote("");
+      setLastTx(j.stage.tx_sig);
+      setMsg({ ok: true, text: `Stage ${station.s} recorded on-chain.` });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -115,98 +217,180 @@ export default function ScanPage() {
   }
 
   const stageMeta = station ? STAGES.find((s) => s.id === station.s) : null;
-  const ready = !!station && !!batchId && !!photo;
+  const doneBatchId = batchId;
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-lg font-semibold">Record a stage</h1>
-
-      <div id="reader" className={`overflow-hidden rounded-lg bg-black ${scanning ? "" : "hidden"}`} />
-      <div className="flex gap-2">
-        {!scanning ? (
-          <button onClick={startScan} className="rounded bg-stone-900 px-4 py-2 text-white dark:bg-stone-100 dark:text-stone-900">
-            📷 Scan QR
-          </button>
-        ) : (
-          <button onClick={stopScan} className="rounded border border-stone-300 px-4 py-2 dark:border-stone-700">
-            Stop
-          </button>
-        )}
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="1. Station (rotating QR)">
-          {station ? (
-            <span className="text-emerald-700 dark:text-emerald-400">
-              {stageMeta?.icon} {stageMeta?.label} · <span className="font-mono">{station.c}</span>
+    <div className="flex min-h-[calc(100vh-5rem)] flex-col gap-4">
+      <ol className="flex items-center justify-center gap-2 text-xs font-medium">
+        {STEP_LABELS.map((s, i) => (
+          <li key={s.key} className="flex items-center gap-2">
+            <span
+              className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                i < stepIndex
+                  ? "bg-forest-800 text-cream-100"
+                  : i === stepIndex
+                    ? "bg-forest-800 text-cream-100"
+                    : "bg-cream-300 text-cream-600 dark:bg-olive-800 dark:text-cream-600"
+              }`}
+            >
+              {i < stepIndex ? "✓" : i + 1}
             </span>
+            <span className={i === stepIndex ? "text-olive-800 dark:text-cream-100" : "text-cream-600 dark:text-cream-500"}>
+              {s.label}
+            </span>
+            {i < STEP_LABELS.length - 1 && <span className="mx-1 h-px w-4 bg-cream-300 dark:bg-forest-800" />}
+          </li>
+        ))}
+      </ol>
+
+      {step === "scan" && (
+        <div className="flex flex-1 flex-col items-center gap-4 animate-fade-in-up">
+          {!cameraEnabled ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+              <CameraIcon className="h-12 w-12 text-olive-600 dark:text-olive-300" />
+              <p className="text-lg font-medium">Camera access is required</p>
+              <p className="max-w-sm text-sm text-cream-700 dark:text-cream-300">
+                Every stage must be verified by scanning the station&apos;s rotating QR code. It
+                can&apos;t be typed in — that&apos;s what proves someone was physically at the
+                station, not just claiming to be.
+              </p>
+              <button onClick={enableCamera} className="rounded-full bg-forest-800 px-6 py-3 font-medium text-cream-100 transition-transform active:scale-95">
+                Enable camera
+              </button>
+            </div>
           ) : (
-            <span className="text-stone-400 dark:text-stone-500">not scanned</span>
+            <>
+              <p className="text-center text-lg font-medium">
+                {!station ? "Point camera at the station screen" : "Now scan the product QR"}
+              </p>
+              {!manualBatch ? (
+                <button onClick={() => setManualBatch(true)} className="text-sm text-forest-800 underline dark:text-olive-300">
+                  Can&apos;t scan the product? Type the batch ID instead
+                </button>
+              ) : (
+                <input
+                  autoFocus
+                  className="w-full max-w-sm rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-center font-mono uppercase text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
+                  placeholder="Batch ID"
+                  value={batchId}
+                  onChange={(e) => setBatchId(e.target.value.toUpperCase())}
+                />
+              )}
+              {station && (
+                <p className="rounded-full bg-olive-100 px-3 py-1 text-sm text-olive-800 dark:bg-forest-800 dark:text-cream-100">
+                  {stageMeta?.label} scanned ✓
+                </p>
+              )}
+              {batchId && (
+                <p className="rounded-full bg-olive-100 px-3 py-1 text-sm text-olive-800 dark:bg-forest-800 dark:text-cream-100">
+                  Batch {batchId} ready ✓
+                </p>
+              )}
+              {station && batchId && (
+                <button
+                  onClick={() => setConfirmed(true)}
+                  className="w-full max-w-sm rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95"
+                >
+                  Next
+                </button>
+              )}
+            </>
           )}
-        </Field>
-        <Field label="2. Product batch">
-          <input
-            className="w-full rounded border border-stone-300 bg-white px-2 py-1 font-mono uppercase text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
-            placeholder="scan or type ID"
-            value={batchId}
-            onChange={(e) => setBatchId(e.target.value.toUpperCase())}
+          {/* Always mounted (not conditionally on cameraEnabled) so it exists
+              in the DOM before enableCamera ever runs — Html5Qrcode's
+              constructor needs the element to already be there, and React's
+              state-update commit isn't guaranteed to land before the
+              dynamic-import call that follows it. Hidden via CSS instead. */}
+          <div
+            id="reader"
+            className={`w-full max-w-sm overflow-hidden rounded-xl bg-black ${cameraEnabled ? "" : "hidden"}`}
           />
-        </Field>
-        <Field label="3. Photo (hash goes on-chain)">
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
-          />
+          {msg && !msg.ok && (
+            <p className="rounded bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{msg.text}</p>
+          )}
+        </div>
+      )}
+
+      {step === "photo" && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 animate-fade-in-up">
+          <p className="text-center text-lg font-medium">Take a photo — its hash goes on-chain</p>
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={preview} alt="preview" className="max-h-80 w-full max-w-sm rounded-xl object-cover" />
+          ) : (
+            <div className="flex h-64 w-full max-w-sm items-center justify-center rounded-xl border-2 border-dashed border-cream-400 dark:border-olive-600">
+              <CameraIcon className="h-10 w-10 text-cream-500 dark:text-cream-600" />
+            </div>
+          )}
+          <label className="w-full max-w-sm cursor-pointer rounded-full bg-forest-800 py-3 text-center font-medium text-cream-100 transition-transform active:scale-95">
+            {preview ? "Retake photo" : "Open camera"}
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        </div>
+      )}
+
+      {step === "details" && (
+        <div className="flex flex-1 flex-col gap-3 animate-fade-in-up">
+          <p className="text-center text-lg font-medium">Confirm details</p>
+          <div className="rounded-lg border border-cream-300 bg-cream-50 p-3 text-sm dark:border-olive-700 dark:bg-olive-800">
+            <b>{stageMeta?.label}</b> · batch <span className="font-mono">{batchId}</span>
+          </div>
           {preview && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="preview" className="mt-2 max-h-40 rounded" />
+            <img src={preview} alt="preview" className="h-32 w-full rounded-lg object-cover" />
           )}
-        </Field>
-        <Field label="4. Details">
           <input
-            className="mb-1 w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
+            className="w-full rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
             placeholder="Your name / role"
             value={actor}
             onChange={(e) => setActor(e.target.value)}
           />
           <input
-            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
+            className="w-full rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
             placeholder="Note (temp 4°C, lot, etc.)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
           />
-        </Field>
-      </div>
-
-      <button
-        disabled={!ready || busy}
-        onClick={submit}
-        className="w-full rounded bg-emerald-600 py-3 font-medium text-white disabled:opacity-40"
-      >
-        {busy ? "Writing to Solana…" : "Submit stage"}
-      </button>
-
-      {msg && (
-        <p className={`rounded p-3 text-sm ${msg.ok ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"}`}>
-          {msg.text}
-        </p>
+          <button
+            disabled={busy}
+            onClick={submit}
+            className="mt-auto w-full rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95 disabled:opacity-40"
+          >
+            {busy ? "Writing to Solana…" : "Submit stage"}
+          </button>
+          {msg && !msg.ok && (
+            <p className="rounded bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{msg.text}</p>
+          )}
+        </div>
       )}
-      {batchId && (
-        <Link href={`/verify/${batchId}`} className="block text-sm text-emerald-700 underline dark:text-emerald-400">
-          View batch {batchId}
-        </Link>
-      )}
-    </div>
-  );
-}
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-stone-200 bg-white p-3 text-sm dark:border-stone-800 dark:bg-stone-900">
-      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</div>
-      {children}
+      {step === "done" && (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center animate-fade-in-up">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-forest-800 text-2xl text-cream-100 animate-pop-in">✓</span>
+          <p className="text-lg font-medium">{msg?.text}</p>
+          <p className="break-all font-mono text-xs text-cream-600 dark:text-cream-400">tx {lastTx.slice(0, 24)}…</p>
+          <div className="flex w-full max-w-sm flex-col gap-2">
+            <button
+              onClick={startOver}
+              className="w-full rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95"
+            >
+              Scan next
+            </button>
+            <Link
+              href={`/verify/${doneBatchId}`}
+              className="w-full rounded-full border border-cream-400 py-3 text-center font-medium transition-colors hover:bg-cream-100 dark:border-olive-600 dark:hover:bg-olive-800"
+            >
+              View batch {doneBatchId}
+            </Link>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
