@@ -116,7 +116,7 @@ function TraceContent({ data, isMock }: { data: TraceData; isMock: boolean }) {
                     {txUrl ? <a className="inline-block py-2 text-sm underline" href={txUrl} target="_blank" rel="noreferrer">View blockchain transaction ↗</a> : <p className={`text-xs ${muted}`}>Simulated record · No blockchain transaction</p>}
                     {snapshotEntries.length > 0 && <div className="border-t border-cream-300 pt-3 dark:border-olive-700">
                       <p className={`flex items-center gap-1.5 text-xs font-medium ${muted}`}>Recorded from
-                        <span className={snapshotMatch ? "text-forest-800 dark:text-forest-400" : "text-red-600 dark:text-red-400"}>{snapshotMatch ? "✓" : "✗ mismatch"}</span>
+                        <span className={snapshotMatch ? "text-forest-800 dark:text-olive-300" : "text-red-600 dark:text-red-400"}>{snapshotMatch ? "✓" : "✗ mismatch"}</span>
                       </p>
                       <dl className={`mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs ${muted}`}>
                         {snapshotEntries.map(([key, value]) => <div key={key} className="contents">
