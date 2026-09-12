@@ -331,6 +331,19 @@ export async function completeStageLocal(s: {
   );
 }
 
+export async function updateStageTxSig(
+  batchId: string,
+  stage: number,
+  txSig: string,
+) {
+  await ready();
+  await d1Run("UPDATE stages SET tx_sig = ? WHERE batch_id = ? AND stage = ?", [
+    txSig,
+    batchId,
+    stage,
+  ]);
+}
+
 const ORG_COLUMNS = [
   "id", "name", "role", "public_key", "contact_email", "phone", "password_hash",
   "location_lat", "location_lng", "grid_region", "certifications", "verification_status",

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
 import {
   completeStageLocal,
@@ -7,6 +7,8 @@ import {
   insertStage,
   lastStage,
   snapshotOrgForStage,
+  updateStageTxSig,
+  type StageRow,
 } from "@/lib/db";
 import { putImage } from "@/lib/r2";
 import { nextAllowedStage, stageById } from "@/lib/stages";
@@ -16,8 +18,54 @@ import { getSessionOrg } from "@/lib/auth";
 import { ROLE_LABELS, roleCanRecordStage } from "@/lib/orgs";
 
 export const runtime = "nodejs";
+/** Solana confirm can exceed default Worker budgets; keep the isolate alive for after(). */
+export const maxDuration = 60;
 
 const SECRET = process.env.STATION_SECRET ?? "dev-station-secret-change-me";
+
+export const TX_PENDING = "pending";
+
+export function isStageTxPending(tx: string) {
+  return tx === TX_PENDING || tx.startsWith("pending:");
+}
+
+export function isStageTxFailed(tx: string) {
+  return tx.startsWith("failed:");
+}
+
+function stageStatus(row: StageRow) {
+  if (isStageTxPending(row.tx_sig)) return "pending" as const;
+  if (isStageTxFailed(row.tx_sig)) return "failed" as const;
+  return "confirmed" as const;
+}
+
+async function runInBackground(work: () => Promise<void>) {
+  try {
+    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
+    const { ctx } = await getCloudflareContext({ async: true });
+    ctx.waitUntil(work());
+  } catch {
+    after(() => work());
+  }
+}
+
+export async function GET(req: Request) {
+  const org = await getSessionOrg();
+  if (!org) {
+    return NextResponse.json({ error: "log in to view stage status" }, { status: 401 });
+  }
+  const url = new URL(req.url);
+  const batchId = String(url.searchParams.get("batchId") ?? "").trim().toUpperCase();
+  const stage = Number(url.searchParams.get("stage"));
+  if (!batchId || !stageById(stage)) {
+    return NextResponse.json({ error: "batchId and stage required" }, { status: 400 });
+  }
+  const row = await getStage(batchId, stage);
+  if (!row) {
+    return NextResponse.json({ error: "stage not found" }, { status: 404 });
+  }
+  return NextResponse.json({ stage: row, status: stageStatus(row) });
+}
 
 export async function POST(req: Request) {
   const org = await getSessionOrg();
@@ -77,9 +125,17 @@ export async function POST(req: Request) {
   }
 
   const existing = await getStage(batchId, stage);
+  if (existing && isStageTxPending(existing.tx_sig)) {
+    return NextResponse.json(
+      { stage: existing, status: "pending" as const },
+      { status: 202 },
+    );
+  }
+
   const incompleteLocal = !!existing && !existing.photo_file;
+  const failedLocal = !!existing && isStageTxFailed(existing.tx_sig);
   const expected = nextAllowedStage(await lastStage(batchId));
-  if (expected !== stage && !incompleteLocal) {
+  if (expected !== stage && !incompleteLocal && !failedLocal) {
     return NextResponse.json(
       {
         error:
@@ -104,12 +160,11 @@ export async function POST(req: Request) {
   };
   const orgSnapshotJson = JSON.stringify(orgSnapshot);
   const snapshotHash = createHash("sha256").update(orgSnapshotJson).digest("hex");
+  const contentType = photo.type === "image/png" ? "image/png" : "image/jpeg";
 
   try {
-    let signature = existing?.tx_sig ?? "";
-
+    // Photo-only backfill for orphaned chain writes (sync — no Solana).
     if (incompleteLocal) {
-      // Chain write already succeeded earlier; only attach local photo/metadata.
       const attrs = await readAttributes(batch.asset);
       const onChain = attrs.find((a) => a.key === stageKey(stage));
       if (!onChain) {
@@ -128,20 +183,27 @@ export async function POST(req: Request) {
           { status: 409 },
         );
       }
-      signature = existing!.tx_sig;
-    } else {
-      const written = await recordStageOnChain({
-        asset: batch.asset,
+      await putImage(photoFile, bytes, contentType);
+      const row = {
+        batch_id: batchId,
         stage,
-        photoHash,
-        ts,
+        photo_file: photoFile,
+        photo_hash: photoHash,
+        note,
         actor,
-        snapshotHash,
-      });
-      signature = written.signature || existing?.tx_sig || "";
+        tx_sig: existing!.tx_sig,
+        created_at: existing!.created_at,
+        actor_org_id: org.id,
+        org_snapshot: existing!.org_snapshot,
+      };
+      await completeStageLocal(row);
+      return NextResponse.json(
+        { stage: row, status: stageStatus({ ...row, id: existing!.id }) },
+        { status: 200 },
+      );
     }
 
-    const contentType = photo.type === "image/png" ? "image/png" : "image/jpeg";
+    // Accept fast: store photo + pending row, write chain in the background.
     await putImage(photoFile, bytes, contentType);
     const row = {
       batch_id: batchId,
@@ -150,50 +212,43 @@ export async function POST(req: Request) {
       photo_hash: photoHash,
       note,
       actor,
-      tx_sig: signature,
-      created_at: incompleteLocal ? existing!.created_at : ts,
+      tx_sig: TX_PENDING,
+      created_at: ts,
       actor_org_id: org.id,
-      org_snapshot: incompleteLocal ? existing!.org_snapshot : orgSnapshotJson,
+      org_snapshot: orgSnapshotJson,
     };
-    if (incompleteLocal) {
+    if (failedLocal) {
       await completeStageLocal(row);
     } else {
       await insertStage(row);
     }
-    return NextResponse.json({ stage: row }, { status: incompleteLocal ? 200 : 201 });
+
+    const asset = batch.asset;
+    await runInBackground(async () => {
+      try {
+        const written = await recordStageOnChain({
+          asset,
+          stage,
+          photoHash,
+          ts,
+          actor,
+          snapshotHash,
+        });
+        const sig = written.signature || "confirmed-no-sig";
+        await updateStageTxSig(batchId, stage, sig);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (/already on-chain/i.test(msg)) {
+          await updateStageTxSig(batchId, stage, "confirmed-existing");
+          return;
+        }
+        await updateStageTxSig(batchId, stage, `failed:${msg.slice(0, 180)}`);
+      }
+    });
+
+    return NextResponse.json({ stage: row, status: "pending" as const }, { status: 202 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (/already on-chain/i.test(msg)) {
-      // Orphaned chain write: finish D1/R2 if local row is missing.
-      const local = await getStage(batchId, stage);
-      if (!local) {
-        try {
-          const attrs = await readAttributes(batch.asset);
-          const onChain = attrs.find((a) => a.key === stageKey(stage));
-          const parsed = onChain ? parseStageValue(onChain.value) : null;
-          if (parsed && parsed.photoHash === photoHash) {
-            const contentType = photo.type === "image/png" ? "image/png" : "image/jpeg";
-            await putImage(photoFile, bytes, contentType);
-            const row = {
-              batch_id: batchId,
-              stage,
-              photo_file: photoFile,
-              photo_hash: photoHash,
-              note,
-              actor: parsed.actor || actor,
-              tx_sig: "",
-              created_at: parsed.ts || ts,
-              actor_org_id: org.id,
-              org_snapshot: orgSnapshotJson,
-            };
-            await insertStage(row);
-            return NextResponse.json({ stage: row }, { status: 201 });
-          }
-        } catch {
-          /* fall through */
-        }
-      }
-    }
     return NextResponse.json({ error: `stage record failed: ${msg}` }, { status: 502 });
   }
 }

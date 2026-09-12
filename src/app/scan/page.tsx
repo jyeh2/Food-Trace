@@ -78,8 +78,10 @@ export default function ScanPage() {
   // in-page getUserMedia webcam flow below.
   const isMobileDevice = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+  const chainPending = lastTx === "pending";
+  const chainFailed = lastTx.startsWith("failed:");
   const step: Step =
-    msg?.ok && lastTx
+    lastTx && (msg?.ok || chainFailed)
       ? "done"
       : !station || !stationConfirmed
         ? "station"
@@ -312,12 +314,54 @@ export default function ScanPage() {
     fd.set("locationLat", String(location.lat));
     fd.set("locationLng", String(location.lng));
     fd.set("locationLabel", location.label);
+    const stageNum = station.s;
+    const pollBatch = batchId;
     try {
       const r = await fetch("/api/stages", { method: "POST", body: fd });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? r.statusText);
+      if (j.status === "pending" || r.status === 202) {
+        setLastTx("pending");
+        setMsg({
+          ok: true,
+          text: `Stage ${stageNum} accepted — writing to Solana in the background.`,
+        });
+        setBusy(false);
+        void (async () => {
+          for (let i = 0; i < 90; i++) {
+            await new Promise((res) => setTimeout(res, 2000));
+            try {
+              const pr = await fetch(
+                `/api/stages?batchId=${encodeURIComponent(pollBatch)}&stage=${stageNum}`,
+              );
+              const pj = await pr.json();
+              if (!pr.ok) continue;
+              if (pj.status === "confirmed") {
+                setLastTx(pj.stage.tx_sig);
+                setMsg({ ok: true, text: `Stage ${stageNum} recorded on-chain.` });
+                return;
+              }
+              if (pj.status === "failed") {
+                setLastTx(pj.stage.tx_sig);
+                setMsg({
+                  ok: false,
+                  text: String(pj.stage.tx_sig).replace(/^failed:/, "Solana write failed: "),
+                });
+                return;
+              }
+            } catch {
+              /* keep polling */
+            }
+          }
+          setMsg({
+            ok: false,
+            text: "Solana write is still running. Check the verify page in a minute.",
+          });
+        })();
+        return;
+      }
       setLastTx(j.stage.tx_sig);
-      setMsg({ ok: true, text: `Stage ${station.s} recorded on-chain.` });
+      setMsg({ ok: true, text: `Stage ${stageNum} recorded on-chain.` });
     } catch (e) {
       setMsg({ ok: false, text: e instanceof Error ? e.message : String(e) });
     } finally {
@@ -591,7 +635,7 @@ export default function ScanPage() {
             onClick={submit}
             className="mt-auto w-full rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95 disabled:opacity-40"
           >
-            {busy ? "Writing to Solana…" : !location ? "Select a location to submit" : "Submit stage"}
+            {busy ? "Submitting…" : !location ? "Select a location to submit" : "Submit stage"}
           </button>
           {msg && !msg.ok && (
             <p className="rounded bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{msg.text}</p>
@@ -601,9 +645,24 @@ export default function ScanPage() {
 
       {step === "done" && (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center animate-fade-in-up">
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-forest-800 text-2xl text-cream-100 animate-pop-in">✓</span>
+          <span
+            className={`flex h-14 w-14 items-center justify-center rounded-full text-2xl text-cream-100 animate-pop-in ${
+              chainFailed ? "bg-red-700" : "bg-forest-800"
+            }`}
+          >
+            {chainPending ? "…" : chainFailed ? "!" : "✓"}
+          </span>
           <p className="text-lg font-medium">{msg?.text}</p>
-          <p className="break-all font-mono text-xs text-cream-600 dark:text-cream-400">tx {lastTx.slice(0, 24)}…</p>
+          {chainPending && (
+            <p className="max-w-sm text-sm text-cream-600 dark:text-cream-400">
+              You can keep scanning other stations — this write finishes on its own.
+            </p>
+          )}
+          {!chainPending && !chainFailed && lastTx && (
+            <p className="break-all font-mono text-xs text-cream-600 dark:text-cream-400">
+              tx {lastTx.slice(0, 24)}…
+            </p>
+          )}
           <div className="flex w-full max-w-sm flex-col gap-2">
             <button
               onClick={startOver}

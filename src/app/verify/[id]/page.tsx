@@ -60,7 +60,9 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
         fileHash,
         match,
         photoUrl: row ? photoPublicUrl(row.photo_file) : undefined,
-        txUrl: row ? explorerUrl("tx", row.tx_sig) : undefined,
+        txUrl: row && row.tx_sig && !row.tx_sig.startsWith("pending") && !row.tx_sig.startsWith("failed")
+          ? explorerUrl("tx", row.tx_sig)
+          : undefined,
         location: hasLocation ? {
           lat,
           lng,
