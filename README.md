@@ -30,7 +30,14 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3000     # use LAN IP for phone testing
 CLOUDFLARE_ACCOUNT_ID=                         # dashboard → Workers → account id
 CLOUDFLARE_API_TOKEN=                          # token with Account / D1 / Edit
 CLOUDFLARE_D1_DATABASE_ID=5c1ae019-3071-4e88-9f91-b3da7ce6b2b8
+
+# OpenRouter (AI batch product reports)
+OPENROUTER_API_KEY=                            # required for /reports/[batch_id]
+OPENROUTER_MODEL=openai/gpt-4o-mini            # optional override
 ```
+
+The `/reports/[batch_id]` page uses `OPENROUTER_API_KEY` and optional
+`OPENROUTER_MODEL` to generate consumer-facing batch product reports via OpenRouter.
 
 ## Demo flow
 
