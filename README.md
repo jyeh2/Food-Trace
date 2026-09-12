@@ -31,12 +31,12 @@ iPhone camera needs HTTPS: `pnpm dev` starts ngrok + Next and prints a public UR
 
 ## Deploy
 
-Pushes to `main` run lint → test → `pnpm deploy`.
+Pushes to `main` run lint → test → `pnpm run deploy`.
 
 Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (GitHub Actions). Worker secrets via `pnpm secrets:put`.
 
 ```bash
-NEXT_PUBLIC_BASE_URL=https://foodtrace.oliverchou.dev pnpm deploy
+NEXT_PUBLIC_BASE_URL=https://foodtrace.oliverchou.dev pnpm run deploy
 ```
 
 ## Layout
