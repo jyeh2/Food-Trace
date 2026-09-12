@@ -12,6 +12,10 @@ function newBatchId() {
 }
 
 export async function GET() {
+  const org = await getSessionOrg();
+  if (!org) {
+    return NextResponse.json({ error: "log in to view batches" }, { status: 401 });
+  }
   const batches = listBatches().map((b) => ({
     ...b,
     last_stage: lastStage(b.id),

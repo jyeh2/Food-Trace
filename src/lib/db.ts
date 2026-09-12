@@ -6,6 +6,51 @@ import type { OrgRole } from "@/lib/orgs";
 const DATA_DIR = path.join(process.cwd(), "data");
 export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 
+/** Shared by the initial CREATE TABLE and the role-split migration rebuild below — keep in sync. */
+const ORGS_TABLE_COLUMNS_SQL = `
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('FARMER','PROCESSOR','DISTRIBUTOR','BUYER','SUPPLIER','ADMIN','AUDITOR')),
+  public_key TEXT,
+  contact_email TEXT NOT NULL UNIQUE,
+  phone TEXT,
+  password_hash TEXT NOT NULL,
+  location_lat REAL,
+  location_lng REAL,
+  grid_region TEXT,
+  certifications TEXT NOT NULL DEFAULT '[]',
+  verification_status TEXT NOT NULL DEFAULT 'unverified' CHECK (verification_status IN ('verified','unverified')),
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+
+  farm_type TEXT,
+  livestock_type TEXT,
+  breed TEXT,
+  herd_size INTEGER,
+  avg_weight_kg REAL,
+  feed_type TEXT,
+  feed_source TEXT,
+  land_area_hectares REAL,
+  land_use_type TEXT,
+  farming_practice TEXT,
+  onsite_renewable_pct REAL,
+
+  facility_type TEXT,
+  facility_energy_source TEXT,
+  facility_renewable_pct REAL,
+  fleet_type TEXT,
+  refrigeration_type TEXT,
+  processing_capacity_kg_per_day REAL,
+  default_transport_mode TEXT,
+
+  buyer_type TEXT,
+  storage_type TEXT,
+  avg_storage_duration_days REAL,
+  cooking_method TEXT,
+  kitchen_energy_source TEXT,
+  sustainability_program TEXT
+`;
+
 export type BatchRow = {
   id: string;
   name: string;
@@ -59,7 +104,7 @@ export type OrgRow = {
   farming_practice: string | null;
   onsite_renewable_pct: number | null;
 
-  // supplier-specific
+  // processor/distributor-specific (formerly "supplier")
   facility_type: string | null;
   facility_energy_source: string | null;
   facility_renewable_pct: number | null;
@@ -119,49 +164,7 @@ function open() {
       created_at INTEGER NOT NULL,
       UNIQUE(batch_id, stage)
     );
-    CREATE TABLE IF NOT EXISTS orgs (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('FARMER','SUPPLIER','BUYER','ADMIN','AUDITOR')),
-      public_key TEXT,
-      contact_email TEXT NOT NULL UNIQUE,
-      phone TEXT,
-      password_hash TEXT NOT NULL,
-      location_lat REAL,
-      location_lng REAL,
-      grid_region TEXT,
-      certifications TEXT NOT NULL DEFAULT '[]',
-      verification_status TEXT NOT NULL DEFAULT 'unverified' CHECK (verification_status IN ('verified','unverified')),
-      active INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER NOT NULL,
-
-      farm_type TEXT,
-      livestock_type TEXT,
-      breed TEXT,
-      herd_size INTEGER,
-      avg_weight_kg REAL,
-      feed_type TEXT,
-      feed_source TEXT,
-      land_area_hectares REAL,
-      land_use_type TEXT,
-      farming_practice TEXT,
-      onsite_renewable_pct REAL,
-
-      facility_type TEXT,
-      facility_energy_source TEXT,
-      facility_renewable_pct REAL,
-      fleet_type TEXT,
-      refrigeration_type TEXT,
-      processing_capacity_kg_per_day REAL,
-      default_transport_mode TEXT,
-
-      buyer_type TEXT,
-      storage_type TEXT,
-      avg_storage_duration_days REAL,
-      cooking_method TEXT,
-      kitchen_energy_source TEXT,
-      sustainability_program TEXT
-    );
+    CREATE TABLE IF NOT EXISTS orgs (${ORGS_TABLE_COLUMNS_SQL});
   `);
   // Migrate columns onto tables that may already exist from before orgs were introduced.
   if (!columnExists(db, "batches", "farmer_org_id")) {
@@ -169,6 +172,30 @@ function open() {
   }
   if (!columnExists(db, "stages", "actor_org_id")) {
     db.exec(`ALTER TABLE stages ADD COLUMN actor_org_id TEXT REFERENCES orgs(id)`);
+  }
+  // SQLite can't ALTER a CHECK constraint in place — rebuild the table if an
+  // older orgs table predates the PROCESSOR/DISTRIBUTOR role split.
+  const orgsSql = (db.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='orgs'",
+  ).get() as { sql: string } | undefined)?.sql;
+  if (orgsSql && !orgsSql.includes("PROCESSOR")) {
+    const cols = ORG_COLUMNS.join(",");
+    // Renaming orgs itself would rewrite batches/stages' FK clauses to point
+    // at the renamed name (SQLite auto-fixes references on ALTER TABLE
+    // RENAME), leaving them referencing a name we're about to drop. Building
+    // the replacement under a fresh name and swapping it in after dropping
+    // the old orgs avoids ever renaming the table other tables reference, so
+    // their "REFERENCES orgs(id)" clauses are never touched. foreign_keys
+    // must be off for the DROP, since batches/stages still hold rows
+    // referencing it.
+    db.pragma("foreign_keys = OFF");
+    db.exec(`
+      CREATE TABLE orgs_new (${ORGS_TABLE_COLUMNS_SQL});
+      INSERT INTO orgs_new (${cols}) SELECT ${cols} FROM orgs;
+      DROP TABLE orgs;
+      ALTER TABLE orgs_new RENAME TO orgs;
+    `);
+    db.pragma("foreign_keys = ON");
   }
   return db;
 }

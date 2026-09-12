@@ -48,7 +48,7 @@ export default function RegisterPage() {
     <div className="mx-auto max-w-sm space-y-4">
       <h1 className="text-lg font-semibold">Join FoodTrace</h1>
       <form onSubmit={submit} className="space-y-3 rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {QUICK_ROLES.map((r) => (
             <button
               key={r}
