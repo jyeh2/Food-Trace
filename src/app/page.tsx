@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Qr } from "@/components/Qr";
 import { STAGES } from "@/lib/stages";
+import { ROLE_LABELS, roleCanMintBatch, type OrgRole } from "@/lib/orgs";
 
 type Batch = {
   id: string;
@@ -14,13 +15,23 @@ type Batch = {
   last_stage: number;
 };
 
+type SessionOrg = { id: string; name: string; role: OrgRole } | null;
+
 export default function Dashboard() {
+  const [org, setOrg] = useState<SessionOrg | undefined>(undefined);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [name, setName] = useState("");
   const [origin, setOrigin] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [created, setCreated] = useState<Batch | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((j) => setOrg(j.org))
+      .catch(() => setOrg(null));
+  }, []);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/batches");
@@ -65,6 +76,8 @@ export default function Dashboard() {
 
   const base = typeof window !== "undefined" ? window.location.origin : "";
 
+  const canMint = !!org && roleCanMintBatch(org.role);
+
   return (
     <div className="space-y-8">
       <section className="rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900">
@@ -72,12 +85,25 @@ export default function Dashboard() {
         <p className="mb-3 text-sm text-stone-500 dark:text-stone-400">
           Mints a Metaplex Core asset on devnet. Product QR links to its verify page.
         </p>
+        {org !== undefined && !canMint && (
+          <p className="mb-3 rounded bg-stone-100 p-3 text-sm text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+            {org
+              ? `${ROLE_LABELS[org.role]} orgs can't mint batches — log in as a Farmer org.`
+              : (
+                <>
+                  <Link href="/login" className="text-emerald-700 underline dark:text-emerald-400">Log in</Link>
+                  {" "}as a FARMER org to mint a batch.
+                </>
+              )}
+          </p>
+        )}
         <form onSubmit={create} className="flex flex-col gap-2 sm:flex-row">
           <input
             className="flex-1 rounded border border-stone-300 bg-white px-3 py-2 text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
             placeholder="Product (e.g. Organic Strawberries)"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            disabled={!canMint}
             required
           />
           <input
@@ -85,10 +111,11 @@ export default function Dashboard() {
             placeholder="Origin (e.g. Green Acres Farm, PA)"
             value={origin}
             onChange={(e) => setOrigin(e.target.value)}
+            disabled={!canMint}
             required
           />
           <button
-            disabled={busy}
+            disabled={busy || !canMint}
             className="rounded bg-emerald-600 px-4 py-2 font-medium text-white disabled:opacity-50"
           >
             {busy ? "Minting…" : "Mint"}

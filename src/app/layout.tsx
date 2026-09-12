@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
+import { AuthNav } from "@/components/AuthNav";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -26,8 +27,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <span className="text-stone-300 dark:text-stone-700">|</span>
             <Link href="/scan" className="hover:underline">Scan</Link>
             <Link href="/station/1" className="hover:underline">Stations</Link>
-            <span className="ml-auto rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-              Solana devnet
+            <span className="ml-auto flex items-center gap-3">
+              <AuthNav />
+              <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+                Solana devnet
+              </span>
             </span>
           </nav>
         </header>
