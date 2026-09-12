@@ -69,16 +69,36 @@ export async function mintBatchNft(input: {
     name: `FoodTrace ${input.name} #${input.batchId}`,
     uri: `${BASE_URL}/api/metadata/${input.batchId}`,
     plugins: [{ type: "Attributes", attributeList }],
-  }).sendAndConfirm(u);
+  }).sendAndConfirm(u, { confirm: { commitment: "finalized" } });
   return { asset: asset.publicKey.toString(), signature: sigToString(signature) };
 }
 
-export async function readAttributes(assetAddr: string): Promise<Attr[]> {
-  const a = await fetchAsset(umi(), publicKey(assetAddr));
-  return (a.attributes?.attributeList ?? []).map((x) => ({
-    key: x.key,
-    value: x.value,
-  }));
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Public devnet RPC load-balances across nodes with slightly lagged state,
+ * so a freshly-finalized account can 404 for a few seconds on the next read.
+ * Retry with backoff instead of surfacing a false "chain unreachable".
+ */
+export async function readAttributes(
+  assetAddr: string,
+  retries = 4,
+): Promise<Attr[]> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const a = await fetchAsset(umi(), publicKey(assetAddr));
+      return (a.attributes?.attributeList ?? []).map((x) => ({
+        key: x.key,
+        value: x.value,
+      }));
+    } catch (e) {
+      const notFound = e instanceof Error && /was not found at the provided address/.test(e.message);
+      if (!notFound || attempt >= retries) throw e;
+      await sleep(500 * 2 ** attempt);
+    }
+  }
 }
 
 export const stageKey = (stage: number) => `stage:${stage}`;

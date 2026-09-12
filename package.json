@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --experimental-https",
+    "dev": "node scripts/dev.mjs",
+    "dev:https": "next dev --experimental-https",
     "dev:http": "next dev",
     "build": "next build",
     "start": "next start",
@@ -39,6 +40,9 @@
   "packageManager": "pnpm@10.6.5",
   "pnpm": {
     "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "bufferutil",
+      "utf-8-validate"
       "better-sqlite3"
     ]
   }

@@ -53,15 +53,18 @@ export default function ScanPage() {
 
   async function startScan() {
     setScanning(true);
-    const { Html5Qrcode } = await import("html5-qrcode");
-    const inst = new Html5Qrcode("reader");
-    scannerRef.current = inst;
     // Keep scanning until both station and batch are captured. Debounce so one
     // QR held in front of the camera doesn't fire repeatedly.
     let lastText = "";
     let lastAt = 0;
     const got = { station: !!station, batch: !!batchId };
     try {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera access requires trusted HTTPS. Open the HTTPS demo URL in Safari.");
+      }
+      const { Html5Qrcode } = await import("html5-qrcode");
+      const inst = new Html5Qrcode("reader");
+      scannerRef.current = inst;
       await inst.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: 240 },
