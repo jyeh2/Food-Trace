@@ -56,7 +56,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
       const snapshotMatch = row ? !parsed?.snapshotHash || snapshotHash === parsed.snapshotHash : undefined;
       const lat = orgSnapshot?.location_lat;
       const lng = orgSnapshot?.location_lng;
-      const hasLocation = typeof lat === "number" && typeof lng === "number";
+      const hasLocation = typeof lat === "number" && typeof lng === "number" && !(lat === 0 && lng === 0);
       return {
         s,
         row,

@@ -188,8 +188,10 @@ const ROLE_SNAPSHOT_FIELDS: Record<OrgRole, (keyof OrgRow)[]> = {
 export function snapshotOrgForStage(org: OrgRow): Record<string, string | number> {
   const snapshot: Record<string, string | number> = {
     grid_region: org.grid_region ?? "unspecified",
-    location_lat: org.location_lat ?? 0,
-    location_lng: org.location_lng ?? 0,
+    // Legacy profiles may not have coordinates. Keep that absence explicit instead of using
+    // 0,0, which Leaflet would incorrectly display as a real point in the Gulf of Guinea.
+    location_lat: org.location_lat ?? "unspecified",
+    location_lng: org.location_lng ?? "unspecified",
   };
   for (const field of ROLE_SNAPSHOT_FIELDS[org.role]) {
     const value = org[field];
@@ -326,6 +328,14 @@ export async function getOrgByEmail(email: string): Promise<OrgRow | undefined> 
 export async function listOrgs(): Promise<OrgRow[]> {
   await ready();
   return d1All<OrgRow>("SELECT * FROM orgs ORDER BY created_at DESC");
+}
+
+export async function updateOrgLocation(id: string, lat: number, lng: number, label: string) {
+  await ready();
+  await d1Run(
+    "UPDATE orgs SET location_lat = ?, location_lng = ?, grid_region = ? WHERE id = ?",
+    [lat, lng, label, id],
+  );
 }
 
 export type BatchReportRow = {

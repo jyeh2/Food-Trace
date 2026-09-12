@@ -24,6 +24,15 @@ export async function POST(req: Request) {
   const stage = Number(form.get("stage"));
   const code = String(form.get("code") ?? "");
   const note = String(form.get("note") ?? "").slice(0, 200);
+  const rawLocationLat = form.get("locationLat");
+  const rawLocationLng = form.get("locationLng");
+  const locationLat = typeof rawLocationLat === "string" && rawLocationLat.trim()
+    ? Number(rawLocationLat)
+    : Number.NaN;
+  const locationLng = typeof rawLocationLng === "string" && rawLocationLng.trim()
+    ? Number(rawLocationLng)
+    : Number.NaN;
+  const locationLabel = String(form.get("locationLabel") ?? "").trim().slice(0, 120);
   const actor = org.name;
   const photo = form.get("photo");
 
@@ -38,6 +47,17 @@ export async function POST(req: Request) {
   }
   if (!(photo instanceof File) || photo.size === 0) {
     return NextResponse.json({ error: "photo required" }, { status: 400 });
+  }
+  if (
+    !Number.isFinite(locationLat) ||
+    !Number.isFinite(locationLng) ||
+    locationLat < -90 ||
+    locationLat > 90 ||
+    locationLng < -180 ||
+    locationLng > 180 ||
+    !locationLabel
+  ) {
+    return NextResponse.json({ error: "a valid current or demo location is required" }, { status: 400 });
   }
   const batch = await getBatch(batchId);
   if (!batch) {
@@ -67,7 +87,12 @@ export async function POST(req: Request) {
   const ext = photo.type === "image/png" ? "png" : "jpg";
   const photoFile = `${batchId}-s${stage}-${randomBytes(3).toString("hex")}.${ext}`;
   const ts = Date.now();
-  const orgSnapshot = snapshotOrgForStage(org);
+  const orgSnapshot = {
+    ...snapshotOrgForStage(org),
+    grid_region: locationLabel,
+    location_lat: locationLat,
+    location_lng: locationLng,
+  };
   const orgSnapshotJson = JSON.stringify(orgSnapshot);
   const snapshotHash = createHash("sha256").update(orgSnapshotJson).digest("hex");
 

@@ -140,6 +140,21 @@ describe("db over D1", () => {
     expect(pub.contact_email).toBe("farm@example.com");
   });
 
+  it("does not turn a missing legacy location into a real 0,0 map point", async () => {
+    const { snapshotOrgForStage } = await loadDb();
+    const snapshot = snapshotOrgForStage({
+      ...sampleOrg,
+      location_lat: null,
+      location_lng: null,
+      grid_region: "Legacy place name",
+    });
+    expect(snapshot).toMatchObject({
+      grid_region: "Legacy place name",
+      location_lat: "unspecified",
+      location_lng: "unspecified",
+    });
+  });
+
   describe("batch_reports cache", () => {
     it("getBatchReport returns undefined when missing", async () => {
       fetchMock.mockResolvedValue(d1Success([]));

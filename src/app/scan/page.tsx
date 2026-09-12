@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { STAGES } from "@/lib/stages";
 import { ROLE_LABELS, ROLE_STAGES, type OrgRole } from "@/lib/orgs";
+import type { RecordedLocation } from "@/lib/demo-locations";
+import { LocationPicker } from "@/components/LocationPicker";
 
 type Station = { s: number; c: string };
 type Step = "station" | "produce" | "photo" | "done";
@@ -57,6 +59,7 @@ export default function ScanPage() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [note, setNote] = useState("");
+  const [location, setLocation] = useState<RecordedLocation | null>(null);
   const [validating, setValidating] = useState(false);
   const [validation, setValidation] = useState<{ matches: boolean; reasoning: string } | { error: string } | null>(null);
   const [photoConfirmed, setPhotoConfirmed] = useState(false);
@@ -291,12 +294,13 @@ export default function ScanPage() {
     setBatchId("");
     onPhoto(null);
     setNote("");
+    setLocation(null);
     setMsg(null);
     setLastTx("");
   }
 
   async function submit() {
-    if (!station || !batchId || !photo || !photoConfirmed) return;
+    if (!station || !batchId || !photo || !photoConfirmed || !location) return;
     setBusy(true);
     setMsg(null);
     const fd = new FormData();
@@ -305,6 +309,9 @@ export default function ScanPage() {
     fd.set("code", station.c);
     fd.set("note", note);
     fd.set("photo", photo);
+    fd.set("locationLat", String(location.lat));
+    fd.set("locationLng", String(location.lng));
+    fd.set("locationLabel", location.label);
     try {
       const r = await fetch("/api/stages", { method: "POST", body: fd });
       const j = await r.json();
@@ -449,6 +456,15 @@ export default function ScanPage() {
           <div className="rounded-lg border border-cream-300 bg-cream-50 p-3 text-sm dark:border-olive-700 dark:bg-olive-800">
             <b>{stageMeta?.label}</b> · batch <span className="font-mono">{batchId}</span>
           </div>
+          <section className="space-y-3 rounded-xl border border-cream-300 bg-cream-50 p-4 dark:border-olive-700 dark:bg-olive-800">
+            <div>
+              <h2 className="font-medium text-olive-900 dark:text-cream-100">Record this stage&apos;s location</h2>
+              <p className="mt-1 text-xs text-cream-700 dark:text-cream-300">
+                Your coordinates are saved with this stage and shown on the customer journey map.
+              </p>
+            </div>
+            <LocationPicker value={location} onChange={setLocation} />
+          </section>
           <div
             className={`aspect-square w-full overflow-hidden rounded-xl transition-shadow ${
               validation && "matches" in validation
@@ -571,11 +587,11 @@ export default function ScanPage() {
             onChange={(e) => setNote(e.target.value)}
           />
           <button
-            disabled={!photo || !photoConfirmed || busy}
+            disabled={!photo || !photoConfirmed || !location || busy}
             onClick={submit}
             className="mt-auto w-full rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95 disabled:opacity-40"
           >
-            {busy ? "Writing to Solana…" : "Submit stage"}
+            {busy ? "Writing to Solana…" : !location ? "Select a location to submit" : "Submit stage"}
           </button>
           {msg && !msg.ok && (
             <p className="rounded bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{msg.text}</p>
