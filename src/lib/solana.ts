@@ -102,12 +102,14 @@ export async function readAttributes(
 }
 
 export const stageKey = (stage: number) => `stage:${stage}`;
-export const stageValue = (photoHash: string, ts: number, actor: string) =>
-  `${photoHash}|${ts}|${actor}`;
+// snapshotHash is optional in the string format (empty segment) so stages recorded before the
+// org-snapshot feature shipped still parse — they just show no snapshot hash to verify against.
+export const stageValue = (photoHash: string, ts: number, actor: string, snapshotHash = "") =>
+  `${photoHash}|${ts}|${actor}|${snapshotHash}`;
 
 export function parseStageValue(v: string) {
-  const [photoHash, ts, actor = ""] = v.split("|");
-  return { photoHash, ts: Number(ts), actor };
+  const [photoHash, ts, actor = "", snapshotHash = ""] = v.split("|");
+  return { photoHash, ts: Number(ts), actor, snapshotHash };
 }
 
 /** Append a stage record to the NFT's on-chain attributes (full-list replace). */
@@ -117,6 +119,9 @@ export async function recordStageOnChain(input: {
   photoHash: string;
   ts: number;
   actor: string;
+  /** sha256 of the JSON-encoded org snapshot (see snapshotOrgForStage) — lets verify/[id]
+   * confirm the stored snapshot wasn't altered, the same way photoHash already does for photos. */
+  snapshotHash: string;
 }) {
   const u = umi();
   const current = await readAttributes(input.asset);
@@ -126,7 +131,7 @@ export async function recordStageOnChain(input: {
   }
   const attributeList = [
     ...current,
-    { key, value: stageValue(input.photoHash, input.ts, input.actor) },
+    { key, value: stageValue(input.photoHash, input.ts, input.actor, input.snapshotHash) },
   ];
   const { signature } = await updatePlugin(u, {
     asset: publicKey(input.asset),

@@ -8,6 +8,16 @@ const panel = "rounded-2xl border border-cream-300 bg-cream-50 p-5 sm:p-7 dark:b
 const muted = "text-cream-700 dark:text-cream-300";
 const descriptions = ["Where this product’s journey begins.", "Preparation and handling before delivery.", "The journey from producer to store.", "Arrival at the store for customers."];
 
+/** Human labels for snapshotOrgForStage's keys (see lib/db.ts) — falls back to the raw key. */
+const SNAPSHOT_LABELS: Record<string, string> = {
+  grid_region: "Grid region", location_lat: "Latitude", location_lng: "Longitude",
+  farm_type: "Farm type", land_use_type: "Land use", farming_practice: "Farming practice",
+  onsite_renewable_pct: "Onsite renewable %", facility_type: "Facility type",
+  facility_energy_source: "Facility energy source", facility_renewable_pct: "Facility renewable %",
+  fleet_type: "Fleet type", refrigeration_type: "Refrigeration", default_transport_mode: "Transport mode",
+  buyer_type: "Buyer type", storage_type: "Storage type", kitchen_energy_source: "Kitchen energy source",
+};
+
 export default function TracePreview({ liveData }: { liveData: TraceData | null }) {
   const [scenario, setScenario] = useState(liveData ? "live" : "registered");
   const [expanded, setExpanded] = useState(!liveData);
@@ -84,7 +94,8 @@ function TraceContent({ data, isMock }: { data: TraceData; isMock: boolean }) {
       <p className={`mt-1 mb-5 text-sm ${muted}`}>The people and records behind this batch.</p>
       <ol className="space-y-4">
         {rows.map((item, i) => {
-          const { s, row, parsed, fileHash, photoUrl, txUrl } = item;
+          const { s, row, parsed, fileHash, photoUrl, txUrl, orgSnapshot, snapshotMatch } = item;
+          const snapshotEntries = orgSnapshot ? Object.entries(orgSnapshot) : [];
           const problem = !!row && !chainErr && !!fileHash && !!parsed && !item.match;
           return <li key={s.id} className="relative flex gap-3 sm:gap-4">
             {i < rows.length - 1 && <span aria-hidden className="absolute top-10 bottom-[-16px] left-[19px] w-px bg-cream-400 dark:bg-olive-600" />}
@@ -103,6 +114,17 @@ function TraceContent({ data, isMock }: { data: TraceData; isMock: boolean }) {
                     <p className={`text-xs leading-relaxed ${muted}`}>Photos are supplied by the recording organization. Matching fingerprints check the photo’s integrity, not the accuracy of every product claim.</p>
                     <dl className={`space-y-2 text-xs ${muted}`}><div><dt>Blockchain photo fingerprint (SHA-256)</dt><dd className="mt-1 break-all font-mono">{parsed?.photoHash ?? "Unavailable"}</dd></div><div><dt>Stored photo fingerprint (SHA-256)</dt><dd className="mt-1 break-all font-mono">{fileHash ?? "Unavailable"}</dd></div></dl>
                     {txUrl ? <a className="inline-block py-2 text-sm underline" href={txUrl} target="_blank" rel="noreferrer">View blockchain transaction ↗</a> : <p className={`text-xs ${muted}`}>Simulated record · No blockchain transaction</p>}
+                    {snapshotEntries.length > 0 && <div className="border-t border-cream-300 pt-3 dark:border-olive-700">
+                      <p className={`flex items-center gap-1.5 text-xs font-medium ${muted}`}>Recorded from
+                        <span className={snapshotMatch ? "text-forest-800 dark:text-olive-300" : "text-red-600 dark:text-red-400"}>{snapshotMatch ? "✓" : "✗ mismatch"}</span>
+                      </p>
+                      <dl className={`mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-xs ${muted}`}>
+                        {snapshotEntries.map(([key, value]) => <div key={key} className="contents">
+                          <dt>{SNAPSHOT_LABELS[key] ?? key}</dt>
+                          <dd className="text-olive-900 dark:text-cream-200">{String(value)}</dd>
+                        </div>)}
+                      </dl>
+                    </div>}
                   </div>
                 </details>
               </> : <p className={`mt-2 text-sm leading-relaxed ${muted}`}>{descriptions[i]} Details will appear when a record is added.</p>}

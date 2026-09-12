@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { UPLOAD_DIR, getBatch, insertStage, lastStage } from "@/lib/db";
+import { UPLOAD_DIR, getBatch, insertStage, lastStage, snapshotOrgForStage } from "@/lib/db";
 import { nextAllowedStage, stageById } from "@/lib/stages";
 import { verifyStationCode } from "@/lib/totp";
 import { recordStageOnChain } from "@/lib/solana";
@@ -67,6 +67,9 @@ export async function POST(req: Request) {
   const ext = photo.type === "image/png" ? "png" : "jpg";
   const photoFile = `${batchId}-s${stage}-${randomBytes(3).toString("hex")}.${ext}`;
   const ts = Date.now();
+  const orgSnapshot = snapshotOrgForStage(org);
+  const orgSnapshotJson = JSON.stringify(orgSnapshot);
+  const snapshotHash = createHash("sha256").update(orgSnapshotJson).digest("hex");
 
   try {
     const { signature } = await recordStageOnChain({
@@ -75,6 +78,7 @@ export async function POST(req: Request) {
       photoHash,
       ts,
       actor,
+      snapshotHash,
     });
     writeFileSync(path.join(UPLOAD_DIR, photoFile), bytes);
     const row = {
@@ -87,6 +91,7 @@ export async function POST(req: Request) {
       tx_sig: signature,
       created_at: ts,
       actor_org_id: org.id,
+      org_snapshot: orgSnapshotJson,
     };
     insertStage(row);
     return NextResponse.json({ stage: row }, { status: 201 });

@@ -18,6 +18,14 @@ async function hashFile(file: string) {
   }
 }
 
+function parseOrgSnapshot(json: string): Record<string, string | number> | undefined {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return undefined;
+  }
+}
+
 export default async function VerifyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (id.toLowerCase() === "demo") return <TracePreview liveData={null} />;
@@ -40,8 +48,34 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
       const parsed = onChain ? parseStageValue(onChain.value) : null;
       const fileHash = row ? await hashFile(row.photo_file) : null;
       const match = !!row && !!parsed && fileHash === parsed.photoHash;
-      return { s, row, parsed, fileHash, match, photoUrl: row ? `/api/uploads/${row.photo_file}` : undefined, txUrl: row ? explorerUrl("tx", row.tx_sig) : undefined };
+      // Old stages recorded before the org-snapshot feature shipped have no on-chain snapshot
+      // hash to check against (parseStageValue defaults it to "") — treat that as "nothing to
+      // verify" rather than tampered, and keep it independent of the primary photo match above.
+      const snapshotHash = row ? createHash("sha256").update(row.org_snapshot).digest("hex") : null;
+      const snapshotMatch = row ? !parsed?.snapshotHash || snapshotHash === parsed.snapshotHash : undefined;
+      return {
+        s,
+        row,
+        parsed,
+        fileHash,
+        match,
+        photoUrl: row ? `/api/uploads/${row.photo_file}` : undefined,
+        txUrl: row ? explorerUrl("tx", row.tx_sig) : undefined,
+        orgSnapshot: row ? parseOrgSnapshot(row.org_snapshot) : undefined,
+        snapshotMatch,
+      };
     }),
   );
-  return <TracePreview key={batch.id} liveData={{ batch, rows, chainErr, assetUrl: explorerUrl("address", batch.asset), mintUrl: explorerUrl("tx", batch.mint_sig) }} />;
+  return (
+    <TracePreview
+      key={batch.id}
+      liveData={{
+        batch,
+        rows,
+        chainErr,
+        assetUrl: explorerUrl("address", batch.asset),
+        mintUrl: explorerUrl("tx", batch.mint_sig),
+      }}
+    />
+  );
 }

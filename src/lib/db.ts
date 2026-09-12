@@ -72,6 +72,10 @@ export type StageRow = {
   tx_sig: string;
   created_at: number;
   actor_org_id: string | null;
+  /** JSON-encoded snapshot of the acting org's location + role-specific fields at record
+   * time — see snapshotOrgForStage. Kept as one column rather than a field per possible
+   * attribute so recording a stage never needs its own form. */
+  org_snapshot: string;
 };
 
 /** Wide table: common fields + every role-specific field, nullable unless relevant to the org's role. */
@@ -130,6 +134,37 @@ export function toPublicOrg(o: OrgRow): PublicOrg {
   return rest;
 }
 
+/** Which of an org's role-specific OrgRow fields get snapshotted onto each stage it records. */
+const ROLE_SNAPSHOT_FIELDS: Record<OrgRole, (keyof OrgRow)[]> = {
+  FARMER: ["farm_type", "land_use_type", "farming_practice", "onsite_renewable_pct"],
+  PROCESSOR: ["facility_type", "facility_energy_source", "facility_renewable_pct"],
+  DISTRIBUTOR: ["fleet_type", "refrigeration_type", "default_transport_mode"],
+  BUYER: ["buyer_type", "storage_type", "kitchen_energy_source"],
+  SUPPLIER: ["facility_type", "default_transport_mode"],
+  ADMIN: [],
+  AUDITOR: [],
+};
+
+/**
+ * Snapshots an org's location + role-specific fields at the moment it records a stage, so a
+ * stage keeps the provenance data that was true then even if the org edits its profile later.
+ * Pulled straight from the org's existing profile — recording a stage never prompts for this,
+ * which matters live at a demo station. Missing profile fields fall back to placeholders so the
+ * snapshot is always presentable rather than full of nulls.
+ */
+export function snapshotOrgForStage(org: OrgRow): Record<string, string | number> {
+  const snapshot: Record<string, string | number> = {
+    grid_region: org.grid_region ?? "unspecified",
+    location_lat: org.location_lat ?? 0,
+    location_lng: org.location_lng ?? 0,
+  };
+  for (const field of ROLE_SNAPSHOT_FIELDS[org.role]) {
+    const value = org[field];
+    snapshot[field] = value === null || value === undefined ? "unspecified" : value;
+  }
+  return snapshot;
+}
+
 declare global {
   var __foodtrace_db: Database.Database | undefined;
 }
@@ -172,6 +207,9 @@ function open() {
   }
   if (!columnExists(db, "stages", "actor_org_id")) {
     db.exec(`ALTER TABLE stages ADD COLUMN actor_org_id TEXT REFERENCES orgs(id)`);
+  }
+  if (!columnExists(db, "stages", "org_snapshot")) {
+    db.exec(`ALTER TABLE stages ADD COLUMN org_snapshot TEXT NOT NULL DEFAULT '{}'`);
   }
   // SQLite can't ALTER a CHECK constraint in place — rebuild the table if an
   // older orgs table predates the PROCESSOR/DISTRIBUTOR role split.
@@ -241,7 +279,7 @@ export function lastStage(batchId: string): number {
 export function insertStage(s: Omit<StageRow, "id">) {
   db()
     .prepare(
-      "INSERT INTO stages (batch_id,stage,photo_file,photo_hash,note,actor,tx_sig,created_at,actor_org_id) VALUES (@batch_id,@stage,@photo_file,@photo_hash,@note,@actor,@tx_sig,@created_at,@actor_org_id)",
+      "INSERT INTO stages (batch_id,stage,photo_file,photo_hash,note,actor,tx_sig,created_at,actor_org_id,org_snapshot) VALUES (@batch_id,@stage,@photo_file,@photo_hash,@note,@actor,@tx_sig,@created_at,@actor_org_id,@org_snapshot)",
     )
     .run(s);
 }
