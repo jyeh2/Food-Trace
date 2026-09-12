@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
-import { writeFileSync } from "node:fs";
-import path from "node:path";
-import { UPLOAD_DIR, getBatch, insertStage, lastStage, snapshotOrgForStage } from "@/lib/db";
+import { getBatch, insertStage, lastStage, snapshotOrgForStage } from "@/lib/db";
+import { putImage } from "@/lib/r2";
 import { nextAllowedStage, stageById } from "@/lib/stages";
 import { verifyStationCode } from "@/lib/totp";
 import { recordStageOnChain } from "@/lib/solana";
@@ -105,10 +104,12 @@ export async function POST(req: Request) {
       actor,
       snapshotHash,
     });
-    writeFileSync(path.join(UPLOAD_DIR, photoFile), bytes);
+    const contentType = photo.type === "image/png" ? "image/png" : "image/jpeg";
+    await putImage(photoFile, bytes, contentType);
     const row = {
       batch_id: batchId,
       stage,
+      // R2 object key in bucket hack-cmu-26
       photo_file: photoFile,
       photo_hash: photoHash,
       note,
@@ -122,6 +123,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ stage: row }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: `chain write failed: ${msg}` }, { status: 502 });
+    return NextResponse.json({ error: `stage record failed: ${msg}` }, { status: 502 });
   }
 }

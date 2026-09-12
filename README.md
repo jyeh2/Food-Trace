@@ -48,7 +48,7 @@ The `/reports/[batch_id]` page uses `OPENROUTER_API_KEY` and optional
 3. `/scan` on a phone — scan station QR, scan product QR (or type ID), take
    photo, submit. Server checks TOTP, hashes photo, updates NFT attributes.
 4. `/verify/<id>` — consumer view. Recomputes photo hashes vs on-chain values.
-   Edit a stored photo in `data/uploads/` → badge flips to TAMPERED.
+   Replace an object in the R2 bucket → badge flips to TAMPERED.
 
 ## iPhone camera setup
 
@@ -91,7 +91,8 @@ not use `DEV_ALLOWED_ORIGINS`, but still requires camera permission.
 
 - `src/lib/totp.ts` — rotating station code (HMAC-SHA256, 30s step, ±1 window)
 - `src/lib/solana.ts` — Umi + mpl-core: mint, append stage attribute, read
-- `src/lib/db.ts` — Cloudflare D1 batches/stages/orgs; photos in `data/uploads`
+- `src/lib/db.ts` — Cloudflare D1 batches/stages/orgs; `photo_file` is the R2 object key
+- `src/lib/r2.ts` — Cloudflare R2 (S3 API) put/get for stage photos
 - `src/app/api/*` — batches, stages, station code, uploads, NFT metadata
 - `src/app/{page,scan,station,verify}` — UI
 

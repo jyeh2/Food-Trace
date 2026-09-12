@@ -6,3 +6,7 @@ binding = "DB"
 database_name = "cmuhacks-food-trace"
 database_id = "5c1ae019-3071-4e88-9f91-b3da7ce6b2b8"
 migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "IMAGES_BUCKET"
+bucket_name = "hack-cmu-26"

@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import { getBatch, listStages } from "@/lib/db";
+import { photoPublicUrl } from "@/lib/r2";
 import { stageById } from "@/lib/stages";
 
 export const runtime = "nodejs";
+
+function absolutePhotoUrl(key: string, base: string) {
+  const u = photoPublicUrl(key);
+  return u.startsWith("http") ? u : `${base}${u}`;
+}
 
 /** Off-chain NFT metadata JSON (Metaplex standard shape). */
 export async function GET(
@@ -18,7 +24,7 @@ export async function GET(
     name: `FoodTrace ${batch.name} #${batch.id}`,
     symbol: "FOOD",
     description: `Provenance record for ${batch.name} from ${batch.origin}.`,
-    image: stages[0] ? `${base}/api/uploads/${stages[0].photo_file}` : undefined,
+    image: stages[0] ? absolutePhotoUrl(stages[0].photo_file, base) : undefined,
     external_url: `${base}/verify/${batch.id}`,
     attributes: [
       { trait_type: "origin", value: batch.origin },

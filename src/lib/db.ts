@@ -1,10 +1,5 @@
-import { mkdirSync } from "node:fs";
-import path from "node:path";
 import type { OrgRole } from "./orgs";
 import { d1All, d1First, d1Run, type SqlValue } from "./d1";
-
-const DATA_DIR = path.join(process.cwd(), "data");
-export const UPLOAD_DIR = path.join(DATA_DIR, "uploads");
 
 /** Shared by schema create and the D1 HTTP migrate — keep in sync with migrations/0001_init.sql. */
 const SCHEMA_SQL = `
@@ -98,7 +93,7 @@ export type StageRow = {
   id: number;
   batch_id: string;
   stage: number;
-  photo_file: string;
+  photo_file: string; // R2 object key in IMAGES_BUCKET (hack-cmu-26)
   photo_hash: string;
   note: string;
   actor: string;
@@ -235,7 +230,6 @@ export function skipD1MigrateForTests() {
 }
 
 async function ready() {
-  mkdirSync(UPLOAD_DIR, { recursive: true });
   if (!globalThis.__foodtrace_d1_ready) {
     globalThis.__foodtrace_d1_ready = migrate();
   }

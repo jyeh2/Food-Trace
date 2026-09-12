@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { UPLOAD_DIR, getBatch, listStages } from "@/lib/db";
+import { getBatch, listStages } from "@/lib/db";
+import { getImage, photoPublicUrl } from "@/lib/r2";
 import TracePreview from "./TracePreview";
 import { STAGES } from "@/lib/stages";
 import { explorerUrl, parseStageValue, readAttributes, stageKey } from "@/lib/solana";
@@ -10,12 +9,9 @@ import { explorerUrl, parseStageValue, readAttributes, stageKey } from "@/lib/so
 export const dynamic = "force-dynamic";
 
 async function hashFile(file: string) {
-  try {
-    const b = await readFile(path.join(UPLOAD_DIR, file));
-    return createHash("sha256").update(b).digest("hex");
-  } catch {
-    return null;
-  }
+  const b = await getImage(file);
+  if (!b) return null;
+  return createHash("sha256").update(b).digest("hex");
 }
 
 function parseOrgSnapshot(json: string): Record<string, string | number> | undefined {
@@ -63,7 +59,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
         parsed,
         fileHash,
         match,
-        photoUrl: row ? `/api/uploads/${row.photo_file}` : undefined,
+        photoUrl: row ? photoPublicUrl(row.photo_file) : undefined,
         txUrl: row ? explorerUrl("tx", row.tx_sig) : undefined,
         location: hasLocation ? {
           lat,
