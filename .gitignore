@@ -48,3 +48,7 @@ next-env.d.ts
 /.playwright-mcp
 
 certificates
+
+# unrelated scratch/reference material, not part of the app
+/food_carbon_chain
+/hotel_carbon_ca
