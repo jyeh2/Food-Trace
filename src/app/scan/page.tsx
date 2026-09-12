@@ -2,21 +2,30 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { STAGES } from "@/lib/stages";
+import { ROLE_LABELS, ROLE_STAGES, type OrgRole } from "@/lib/orgs";
 
 type Station = { s: number; c: string };
+type SessionOrg = { id: string; name: string; role: OrgRole } | null;
 
-/** Worker app: scan station QR + product QR, take photo, submit. */
+/** Worker app: scan station QR + product QR, take photo, submit. Requires a logged-in org. */
 export default function ScanPage() {
+  const [org, setOrg] = useState<SessionOrg | undefined>(undefined);
   const [station, setStation] = useState<Station | null>(null);
   const [batchId, setBatchId] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [note, setNote] = useState("");
-  const [actor, setActor] = useState("");
   const [scanning, setScanning] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((j) => setOrg(j.org))
+      .catch(() => setOrg(null));
+  }, []);
 
   /** Returns which thing was decoded so the scanner knows whether to keep going. */
   function handleDecoded(text: string): "station" | "batch" | null {
@@ -100,7 +109,6 @@ export default function ScanPage() {
     fd.set("stage", String(station.s));
     fd.set("code", station.c);
     fd.set("note", note);
-    fd.set("actor", actor || `station-${station.s}`);
     fd.set("photo", photo);
     try {
       const r = await fetch("/api/stages", { method: "POST", body: fd });
@@ -120,9 +128,28 @@ export default function ScanPage() {
   const stageMeta = station ? STAGES.find((s) => s.id === station.s) : null;
   const ready = !!station && !!batchId && !!photo;
 
+  if (org === undefined) return null;
+  if (!org) {
+    return (
+      <div className="space-y-3">
+        <h1 className="text-lg font-semibold">Record a stage</h1>
+        <p className="rounded-lg border border-stone-200 bg-white p-4 text-sm dark:border-stone-800 dark:bg-stone-900">
+          You need to be logged in as an org to record a stage.{" "}
+          <Link href="/login" className="text-emerald-700 underline dark:text-emerald-400">Log in</Link>
+          {" "}or{" "}
+          <Link href="/register" className="text-emerald-700 underline dark:text-emerald-400">register an org</Link>.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-semibold">Record a stage</h1>
+      <p className="text-sm text-stone-500 dark:text-stone-400">
+        Logged in as <span className="font-medium text-stone-700 dark:text-stone-300">{org.name}</span> ({ROLE_LABELS[org.role]}) — can record stage
+        {ROLE_STAGES[org.role].length === 1 ? "" : "s"} {ROLE_STAGES[org.role].join(", ") || "none"}.
+      </p>
 
       <div id="reader" className={`overflow-hidden rounded-lg bg-black ${scanning ? "" : "hidden"}`} />
       <div className="flex gap-2">
@@ -168,12 +195,6 @@ export default function ScanPage() {
           )}
         </Field>
         <Field label="4. Details">
-          <input
-            className="mb-1 w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
-            placeholder="Your name / role"
-            value={actor}
-            onChange={(e) => setActor(e.target.value)}
-          />
           <input
             className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
             placeholder="Note (temp 4°C, lot, etc.)"
