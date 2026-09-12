@@ -9,32 +9,15 @@ type Code = { stage: number; label: string; code: string; expiresAt: number; pay
 
 /** Rendered client-only (see page.tsx), so window/sessionStorage are safe in initializers. */
 export function StationDisplay({ stage }: { stage: string }) {
-  const [key, setKey] = useState(
-    () =>
-      new URLSearchParams(window.location.search).get("k") ??
-      sessionStorage.getItem("stationKey") ??
-      "",
-  );
-  const [authErr, setAuthErr] = useState(false);
-  const [attempt, setAttempt] = useState(0);
   const [data, setData] = useState<Code | null>(null);
   const [now, setNow] = useState(0);
 
   useEffect(() => {
-    if (!key) return;
-    sessionStorage.setItem("stationKey", key);
     let timer: ReturnType<typeof setTimeout>;
     let alive = true;
     async function refresh() {
-      const r = await fetch(`/api/station/${stage}`, {
-        cache: "no-store",
-        headers: { "x-station-key": key },
-      });
+      const r = await fetch(`/api/station/${stage}`, { cache: "no-store" });
       if (!alive) return;
-      if (r.status === 401) {
-        setAuthErr(true);
-        return;
-      }
       if (!r.ok) return;
       const j: Code = await r.json();
       if (!alive) return;
@@ -48,43 +31,10 @@ export function StationDisplay({ stage }: { stage: string }) {
       clearTimeout(timer);
       clearInterval(tick);
     };
-  }, [stage, key, attempt]);
+  }, [stage]);
 
   const meta = STAGES.find((s) => String(s.id) === stage);
   if (!meta) return <p>Unknown stage.</p>;
-
-  if (authErr || !key) {
-    return (
-      <form
-        className="mx-auto max-w-sm space-y-3 rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const v = new FormData(e.currentTarget).get("k");
-          const k = typeof v === "string" ? v.trim() : "";
-          if (!k) return;
-          setAuthErr(false);
-          setKey(k);
-          setAttempt((n) => n + 1);
-        }}
-      >
-        <h1 className="text-lg font-semibold">
-          {meta.icon} Station {meta.id}: {meta.label}
-        </h1>
-        <p className="text-sm text-stone-600 dark:text-stone-300">
-          This screen shows the rotating QR for the station. Enter the station display key
-          (<code>STATION_DISPLAY_KEY</code> in <code>.env.local</code>) once on this device.
-        </p>
-        {authErr && <p className="text-sm text-red-600 dark:text-red-400">Key rejected. Try again.</p>}
-        <input
-          name="k"
-          autoFocus
-          className="w-full rounded border border-stone-300 bg-white px-3 py-2 font-mono text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
-          placeholder="station display key"
-        />
-        <button className="w-full rounded bg-stone-900 py-2 text-white dark:bg-stone-100 dark:text-stone-900">Unlock station</button>
-      </form>
-    );
-  }
 
   const secsLeft = data && now ? Math.max(0, Math.ceil((data.expiresAt - now) / 1000)) : 0;
   const pct = data && now ? Math.max(0, (data.expiresAt - now) / TOTP_STEP_MS) * 100 : 0;

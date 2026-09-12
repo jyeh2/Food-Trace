@@ -22,16 +22,15 @@ SOLANA_RPC_URL=https://api.devnet.solana.com   # or testnet
 SOLANA_CLUSTER=devnet
 SERVER_KEYPAIR_PATH=.keys/server.json
 STATION_SECRET=change-me
-STATION_DISPLAY_KEY=change-me-too   # station display pages open as /station/N?k=<this>
 NEXT_PUBLIC_BASE_URL=http://localhost:3000     # use LAN IP for phone testing
 ```
 
 ## Demo flow
 
 1. `/` — create batch → mints NFT → shows product QR.
-2. `/station/1?k=<STATION_DISPLAY_KEY>` … `/station/4?k=…` — open on a laptop at
-   each stage; QR rotates every 30s. Key is remembered in sessionStorage. Without
-   it the code endpoint returns 401, so nobody can fetch codes remotely.
+2. `/station/1` … `/station/4` — open on a laptop at each stage; pick the stage
+   from the buttons at the top. QR rotates every 30s. No login required to view
+   a station's code — anyone with the URL can display or fetch it.
 3. `/scan` on a phone — scan station QR, scan product QR (or type ID), take
    photo, submit. Server checks TOTP, hashes photo, updates NFT attributes.
 4. `/verify/<id>` — consumer view. Recomputes photo hashes vs on-chain values.
