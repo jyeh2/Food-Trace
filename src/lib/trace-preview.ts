@@ -14,6 +14,8 @@ export type TraceData = {
     match: boolean;
     photoUrl?: string;
     txUrl?: string;
+    /** Map location captured for this stage. */
+    location?: { lat: number; lng: number; label: string };
     /** Acting org's location + role-specific fields at record time — see snapshotOrgForStage
      * in lib/db.ts. Undefined for mock preview rows, which have nothing to snapshot. */
     orgSnapshot?: Record<string, string | number>;
@@ -40,6 +42,12 @@ export function createTracePreview(id: string): TraceData {
   const createdAt = Date.UTC(2026, 8, 10, 9);
   const actors = ["Demo Green Valley Farm", "Demo Fresh Processing", "Demo Cold Chain Logistics", "Demo Community Market"];
   const notes = ["Harvested and packed at the farm.", "Washed, sorted and quality checked.", "Transported in refrigerated storage at 4°C.", "Received and stocked for customers."];
+  const locations = [
+    { lat: 40.0379, lng: -76.3055, label: "Lancaster, Pennsylvania" },
+    { lat: 40.2732, lng: -76.8867, label: "Harrisburg, Pennsylvania" },
+    { lat: 40.4406, lng: -79.9959, label: "Pittsburgh Distribution Center" },
+    { lat: 40.4433, lng: -79.9436, label: "Pittsburgh Community Market" },
+  ];
   return {
     batch: id === "empty" ? null : {
       id: "MOCK-DEMO", name: "Demo · Organic Tomatoes", origin: "Green Valley Demo Farm",
@@ -63,6 +71,7 @@ export function createTracePreview(id: string): TraceData {
           actor: actors[i], tx_sig: "", created_at, actor_org_id: null, org_snapshot: "{}" } : undefined,
         parsed, fileHash, match: recorded && !!parsed && fileHash === parsed.photoHash,
         photoUrl: recorded && !missingPhoto ? `data:image/svg+xml,${encodeURIComponent(svg)}` : undefined,
+        location: recorded ? locations[i] : undefined,
       };
     }),
   };

@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS stages (
   tx_sig TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   actor_org_id TEXT REFERENCES orgs(id),
+  org_snapshot TEXT NOT NULL DEFAULT '{}',
   UNIQUE(batch_id, stage)
 );
 

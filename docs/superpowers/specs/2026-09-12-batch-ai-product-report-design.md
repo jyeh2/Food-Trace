@@ -1,7 +1,7 @@
 # Batch AI Product Report — Design
 
-**Date:** 2026-09-12  
-**Status:** Approved for planning  
+**Date:** 2026-09-12
+**Status:** Approved for planning
 **Product:** FoodTrace (farm-to-shelf provenance on Solana)
 
 ## Goal
@@ -158,15 +158,15 @@ Validate with Zod before caching. On schema failure: do not write cache; show er
 
 `src/components/BatchReport.tsx` — white, scrollable, letter-ish sheet (~816px max-width), print-friendly:
 
-1. Cover — title, tagline, batch `#`, origin, generated date  
-2. Product story — originStory + highlights  
-3. Journey timeline — completed vs pending  
-4. Trust — badges + verification summary  
-5. Auditor appendix — NFT, mint tx, stage hash table, orgs, integrity notes  
-6. Footer — link to `/verify/[id]`, FoodTrace mark  
+1. Cover — title, tagline, batch `#`, origin, generated date
+2. Product story — originStory + highlights
+3. Journey timeline — completed vs pending
+4. Trust — badges + verification summary
+5. Auditor appendix — NFT, mint tx, stage hash table, orgs, integrity notes
+6. Footer — link to `/verify/[id]`, FoodTrace mark
 
-Generation runs in the server page (v1 blocks until done). The browser shows the normal Next navigation/loading state; no separate streaming UI.  
-Error: agent/API/schema failure shows message + retry link (`?refresh=1`).  
+Generation runs in the server page (v1 blocks until done). The browser shows the normal Next navigation/loading state; no separate streaming UI.
+Error: agent/API/schema failure shows message + retry link (`?refresh=1`).
 Print: `@media print` hides site chrome; keeps the sheet.
 
 ### Discovery

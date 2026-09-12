@@ -1,0 +1,1 @@
+ALTER TABLE stages ADD COLUMN org_snapshot TEXT NOT NULL DEFAULT '{}';

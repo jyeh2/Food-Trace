@@ -71,6 +71,58 @@ button:not(:disabled) {
   cursor: pointer;
 }
 
+.journey-map-marker-shell {
+  border: 0;
+  background: transparent;
+}
+
+.journey-map-marker-dot {
+  display: flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fefcf9;
+  border-radius: 9999px;
+  background: #1c4038;
+  color: #fefcf9;
+  font-weight: 700;
+  box-shadow: 0 5px 16px rgb(20 46 40 / 35%);
+  transition: transform 160ms ease, background 160ms ease;
+}
+
+.journey-map-marker-shell:hover .journey-map-marker-dot,
+.journey-map-marker-shell:focus-visible .journey-map-marker-dot {
+  transform: scale(1.12);
+  background: #26544a;
+  outline: 3px solid rgb(169 184 122 / 50%);
+  outline-offset: 2px;
+}
+
+.leaflet-container {
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.leaflet-control-zoom a {
+  color: #1c4038;
+}
+
+.journey-map-popup {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 11rem;
+  color: #1f2509;
+}
+
+.journey-map-popup span,
+.journey-map-popup small {
+  display: block;
+}
+
+.journey-map-popup small {
+  color: #7d714f;
+}
+
 @keyframes fade-in-up {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }

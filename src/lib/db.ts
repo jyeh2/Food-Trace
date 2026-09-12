@@ -71,6 +71,7 @@ const SCHEMA_SQL = `
     tx_sig TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     actor_org_id TEXT REFERENCES orgs(id),
+    org_snapshot TEXT NOT NULL DEFAULT '{}',
     UNIQUE(batch_id, stage)
   );
   CREATE TABLE IF NOT EXISTS batch_reports (
@@ -221,6 +222,9 @@ async function migrate() {
   if (!(await columnExists("stages", "actor_org_id"))) {
     await d1Run("ALTER TABLE stages ADD COLUMN actor_org_id TEXT REFERENCES orgs(id)");
   }
+  if (!(await columnExists("stages", "org_snapshot"))) {
+    await d1Run("ALTER TABLE stages ADD COLUMN org_snapshot TEXT NOT NULL DEFAULT '{}'");
+  }
 }
 
 /** Test-only: skip CREATE TABLE / ALTER against D1 so unit tests can mock individual queries. */
@@ -271,7 +275,7 @@ export async function lastStage(batchId: string): Promise<number> {
 export async function insertStage(s: Omit<StageRow, "id">) {
   await ready();
   await d1Run(
-    "INSERT INTO stages (batch_id,stage,photo_file,photo_hash,note,actor,tx_sig,created_at,actor_org_id) VALUES (?,?,?,?,?,?,?,?,?)",
+    "INSERT INTO stages (batch_id,stage,photo_file,photo_hash,note,actor,tx_sig,created_at,actor_org_id,org_snapshot) VALUES (?,?,?,?,?,?,?,?,?,?)",
     [
       s.batch_id,
       s.stage,
@@ -282,6 +286,7 @@ export async function insertStage(s: Omit<StageRow, "id">) {
       s.tx_sig,
       s.created_at,
       s.actor_org_id,
+      s.org_snapshot,
     ],
   );
 }

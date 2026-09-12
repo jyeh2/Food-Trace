@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ProductQr } from "@/components/ProductQr";
 import { createTracePreview, TRACE_SCENARIOS, type TraceData } from "@/lib/trace-preview";
+import { JourneyMap } from "./JourneyMap";
 
 const panel = "rounded-2xl border border-cream-300 bg-cream-50 p-5 sm:p-7 dark:border-olive-700 dark:bg-olive-800";
 const muted = "text-cream-700 dark:text-cream-300";
@@ -19,7 +20,7 @@ const SNAPSHOT_LABELS: Record<string, string> = {
 };
 
 export default function TracePreview({ liveData }: { liveData: TraceData | null }) {
-  const [scenario, setScenario] = useState(liveData ? "live" : "registered");
+  const [scenario, setScenario] = useState(liveData ? "live" : "through-4");
   const [expanded, setExpanded] = useState(!liveData);
   const isMock = scenario !== "live";
   const data = isMock ? createTracePreview(scenario) : liveData!;
@@ -88,6 +89,8 @@ function TraceContent({ data, isMock }: { data: TraceData; isMock: boolean }) {
         <div><p className="text-sm font-semibold">{status}</p><p className={`mt-1 text-sm leading-relaxed ${muted}`}>{chainErr ? "We couldn’t reach the blockchain. You can still explore the saved records; refresh to try verification again." : !done ? "This product has been registered. Its journey details have not been added yet." : mismatch ? "At least one photo differs from its blockchain fingerprint. Open the stage below to see the details." : `${matched} of ${done} recorded photos match their blockchain fingerprints. ${done < rows.length ? "The journey is still partly recorded." : "All journey stages have a record."}`}</p></div>
       </div>
     </section>
+
+    <JourneyMap rows={rows} />
 
     <section aria-labelledby="journey-heading">
       <h2 id="journey-heading" className="text-2xl font-semibold">From farm to shelf</h2>

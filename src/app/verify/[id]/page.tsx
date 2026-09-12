@@ -51,8 +51,12 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
       // Old stages recorded before the org-snapshot feature shipped have no on-chain snapshot
       // hash to check against (parseStageValue defaults it to "") — treat that as "nothing to
       // verify" rather than tampered, and keep it independent of the primary photo match above.
+      const orgSnapshot = row ? parseOrgSnapshot(row.org_snapshot) : undefined;
       const snapshotHash = row ? createHash("sha256").update(row.org_snapshot).digest("hex") : null;
       const snapshotMatch = row ? !parsed?.snapshotHash || snapshotHash === parsed.snapshotHash : undefined;
+      const lat = orgSnapshot?.location_lat;
+      const lng = orgSnapshot?.location_lng;
+      const hasLocation = typeof lat === "number" && typeof lng === "number";
       return {
         s,
         row,
@@ -61,7 +65,12 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
         match,
         photoUrl: row ? `/api/uploads/${row.photo_file}` : undefined,
         txUrl: row ? explorerUrl("tx", row.tx_sig) : undefined,
-        orgSnapshot: row ? parseOrgSnapshot(row.org_snapshot) : undefined,
+        location: hasLocation ? {
+          lat,
+          lng,
+          label: typeof orgSnapshot?.grid_region === "string" ? orgSnapshot.grid_region : row!.actor,
+        } : undefined,
+        orgSnapshot,
         snapshotMatch,
       };
     }),
