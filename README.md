@@ -33,10 +33,13 @@ iPhone camera needs HTTPS: `pnpm dev` starts ngrok + Next and prints a public UR
 
 Pushes to `main` run lint → test → `pnpm run deploy`.
 
-Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (GitHub Actions). Worker secrets via `pnpm secrets:put`.
+Secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` (GitHub Actions). Worker secrets via `pnpm secrets:put` (reads `.env.local`).
+
+**Solana RPC:** public `api.devnet.solana.com` returns `403` from Cloudflare Workers. The app defaults to MagicBlock’s keyless devnet RPC (`https://rpc.magicblock.app/devnet`), which works from Workers. Override with Helius/QuickNode via `SOLANA_RPC_URL` in `.env.local` if you need higher limits, then `pnpm secrets:put`.
 
 ```bash
 NEXT_PUBLIC_BASE_URL=https://foodtrace.oliverchou.dev pnpm run deploy
+pnpm secrets:put   # includes SOLANA_RPC_URL, SERVER_KEYPAIR_JSON, D1/R2, IFM, …
 ```
 
 ## Layout

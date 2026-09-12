@@ -9,13 +9,27 @@
  *
  * NEXT_PUBLIC_* vars are skipped (inlined at build time, not Worker secrets).
  * SERVER_KEYPAIR_PATH is expanded into SERVER_KEYPAIR_JSON for Workers.
+ * SOLANA_RPC_URL: do not use public api.*.solana.com on Workers (403).
+ * Default in app code is MagicBlock keyless devnet.
+ *
+ * Wrangler auto-loads .env.local from cwd; D1 API tokens there often lack
+ * Workers Secrets permissions. We run `secret put` from a temp dir with a
+ * minimal wrangler.toml so OAuth login is used instead.
  */
 import { spawn } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import {
+  readFileSync,
+  existsSync,
+  mkdtempSync,
+  writeFileSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const wranglerBin = path.join(root, "node_modules", ".bin", "wrangler");
 
 const SECRET_KEYS = [
   "SOLANA_RPC_URL",
@@ -78,6 +92,16 @@ function parseEnvFile(filePath) {
   return out;
 }
 
+function readWorkerIdentity() {
+  const toml = readFileSync(path.join(root, "wrangler.toml"), "utf8");
+  const name = toml.match(/^\s*name\s*=\s*"([^"]+)"/m)?.[1];
+  const accountId = toml.match(/^\s*account_id\s*=\s*"([^"]+)"/m)?.[1];
+  const compatibilityDate =
+    toml.match(/^\s*compatibility_date\s*=\s*"([^"]+)"/m)?.[1] ?? "2026-09-12";
+  if (!name) throw new Error("wrangler.toml missing name");
+  return { name, accountId, compatibilityDate };
+}
+
 function resolveKeypairJson(env) {
   if (env.SERVER_KEYPAIR_JSON?.trim()) return env.SERVER_KEYPAIR_JSON.trim();
   const rel = env.SERVER_KEYPAIR_PATH?.trim() || ".keys/server.json";
@@ -92,17 +116,13 @@ function resolveKeypairJson(env) {
   return raw;
 }
 
-function putSecret(name, value, wranglerEnv) {
+function putSecret(name, value, wranglerEnv, cwd) {
   return new Promise((resolve, reject) => {
-    const child = spawn(
-      "pnpm",
-      ["exec", "wrangler", "secret", "put", name],
-      {
-        cwd: root,
-        stdio: ["pipe", "inherit", "inherit"],
-        env: wranglerEnv,
-      },
-    );
+    const child = spawn(wranglerBin, ["secret", "put", name], {
+      cwd,
+      stdio: ["pipe", "inherit", "inherit"],
+      env: wranglerEnv,
+    });
     child.stdin.write(value);
     child.stdin.end();
     child.on("error", reject);
@@ -124,7 +144,11 @@ async function main() {
   const env = parseEnvFile(absEnv);
   env.SERVER_KEYPAIR_JSON = resolveKeypairJson(env);
 
-  const accountId = env.CLOUDFLARE_ACCOUNT_ID?.trim() || env.R2_ACCOUNT_ID?.trim();
+  const worker = readWorkerIdentity();
+  const accountId =
+    env.CLOUDFLARE_ACCOUNT_ID?.trim() ||
+    env.R2_ACCOUNT_ID?.trim() ||
+    worker.accountId;
   // App D1 tokens often lack memberships:read; use `wrangler login` OAuth instead.
   const wranglerEnv = { ...process.env };
   delete wranglerEnv.CLOUDFLARE_API_TOKEN;
@@ -163,14 +187,43 @@ async function main() {
   console.log(`${dryRun ? "would put" : "putting"} ${toPut.length} secret(s):`);
   for (const [key] of toPut) console.log(`  ${key}`);
 
+  const rpc = env.SOLANA_RPC_URL?.trim() ?? "";
+  if (/api\.(devnet|testnet|mainnet-beta)\.solana\.com/i.test(rpc)) {
+    console.warn(
+      "warning: SOLANA_RPC_URL is a public Solana endpoint — Cloudflare Workers get 403. Use https://rpc.magicblock.app/devnet or Helius/QuickNode.",
+    );
+  }
+
   if (dryRun) return;
 
-  for (const [key, value] of toPut) {
-    process.stdout.write(`→ ${key} ... `);
-    await putSecret(key, value, wranglerEnv);
-    console.log("ok");
+  const staging = mkdtempSync(path.join(tmpdir(), "foodtrace-secrets-"));
+  try {
+    writeFileSync(
+      path.join(staging, "wrangler.toml"),
+      [
+        `name = "${worker.name}"`,
+        `main = "worker.js"`,
+        `compatibility_date = "${worker.compatibilityDate}"`,
+        accountId ? `account_id = "${accountId}"` : "",
+        "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+    writeFileSync(
+      path.join(staging, "worker.js"),
+      "export default { async fetch() { return new Response('ok'); } };\n",
+    );
+
+    for (const [key, value] of toPut) {
+      process.stdout.write(`→ ${key} ... `);
+      await putSecret(key, value, wranglerEnv, staging);
+      console.log("ok");
+    }
+    console.log("done");
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
   }
-  console.log("done");
 }
 
 main().catch((err) => {
