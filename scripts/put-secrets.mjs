@@ -33,6 +33,8 @@ const SECRET_KEYS = [
   "R2_PUBLIC_URL",
   "OPENROUTER_API_KEY",
   "OPENROUTER_MODEL",
+  "IFM_API_KEY",
+  "IFM_MODEL",
 ];
 
 function parseArgs(argv) {

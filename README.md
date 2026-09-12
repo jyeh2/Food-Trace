@@ -15,13 +15,13 @@ Farm-to-shelf provenance on Solana. Each batch is a Metaplex Core NFT; each stag
 
 ## Stack
 
-Next.js · Solana (Metaplex Core) · Cloudflare D1 + R2 · OpenRouter (AI reports)
+Next.js · Solana (Metaplex Core) · Cloudflare D1 + R2 · IFM K2 Horizon (AI reports) · OpenRouter (photo validation)
 
 ## Run
 
 ```bash
 pnpm install
-# .env.local from env.example (Solana + Cloudflare D1 + OpenRouter)
+# .env.local from env.example (Solana + Cloudflare D1 + IFM + OpenRouter)
 solana-keygen pubkey .keys/server.json   # fund via faucet
 pnpm db:migrate
 pnpm dev

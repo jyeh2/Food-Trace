@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@ai-sdk/openai':
+        specifier: ^4.0.66
+        version: 4.0.66(zod@4.6.2)
       '@aws-sdk/client-s3':
         specifier: ^3.1131.0
         version: 3.1131.0
@@ -98,6 +101,12 @@ packages:
 
   '@ai-sdk/gateway@4.0.80':
     resolution: {integrity: sha512-6t+07o8lSthpKf64Xb1qHWR2bWvJ3Fd2oFvS9fQc45p31bi2OUqan246e/ojAmZpWCiMPjKyQ4TBr4MYytnTiQ==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/openai@4.0.66':
+    resolution: {integrity: sha512-W4GooZjROdOmf7dfjWlRWNVs+Vvr7ZwfDZbyAJRPo1bgQbpRoDd9ZcCwy/PX1X0s2G7B/dhN2RWOORsHtr0wGg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -4194,6 +4203,12 @@ snapshots:
       '@ai-sdk/provider': 4.0.14
       '@ai-sdk/provider-utils': 5.0.40(zod@4.6.2)
       '@vercel/oidc': 3.2.0
+      zod: 4.6.2
+
+  '@ai-sdk/openai@4.0.66(zod@4.6.2)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.14
+      '@ai-sdk/provider-utils': 5.0.40(zod@4.6.2)
       zod: 4.6.2
 
   '@ai-sdk/provider-utils@5.0.40(zod@4.6.2)':

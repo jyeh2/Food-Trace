@@ -1,4 +1,4 @@
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, Output, tool, stepCountIs } from "ai";
 import { z } from "zod";
 import {
@@ -12,10 +12,11 @@ import { STAGES } from "./stages";
 import { readAttributes } from "./solana";
 import { batchReportSchema, type BatchReportData } from "./report-schema";
 
-export const DEFAULT_REPORT_MODEL = "openai/gpt-4o-mini";
+export const DEFAULT_REPORT_MODEL = "IFM/K2-Horizon-375B-A23B";
+export const IFM_BASE_URL = "https://api.ifm.ai/v1";
 
 function modelId() {
-  return process.env.OPENROUTER_MODEL?.trim() || DEFAULT_REPORT_MODEL;
+  return process.env.IFM_MODEL?.trim() || DEFAULT_REPORT_MODEL;
 }
 
 async function loadReportContext(id: string) {
@@ -55,20 +56,24 @@ async function loadReportContext(id: string) {
 export async function generateBatchReport(
   batchId: string,
 ): Promise<{ report: BatchReportData; model: string }> {
-  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  const apiKey = process.env.IFM_API_KEY?.trim();
   if (!apiKey) {
-    throw new Error("OPENROUTER_API_KEY is not configured");
+    throw new Error("IFM_API_KEY is not configured");
   }
 
   const id = batchId.toUpperCase();
-  const openrouter = createOpenRouter({ apiKey });
+  const ifm = createOpenAI({
+    apiKey,
+    baseURL: IFM_BASE_URL,
+    name: "ifm",
+  });
   const model = modelId();
   const context = await loadReportContext(id);
 
   // Tools stay available for the agent loop; context is also inlined so the
   // model can emit structured output even if it skips tool calls.
   const result = await generateText({
-    model: openrouter(model),
+    model: ifm.chat(model),
     system: `You are FoodTrace's product report writer.
 Never invent stages, orgs, hashes, or transactions beyond the provided data.
 Write consumer-friendly product/journey/trust copy grounded only in that data.
