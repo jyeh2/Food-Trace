@@ -92,4 +92,47 @@ describe("buildReportFingerprint", () => {
     });
     expect(a).not.toBe(b);
   });
+
+  it("ignores secret org fields (public_key, contact_email, phone)", () => {
+    const a = buildReportFingerprint({ batch, stages: [stage1], orgs: [org] });
+    const b = buildReportFingerprint({
+      batch,
+      stages: [stage1],
+      orgs: [
+        {
+          ...org,
+          public_key: "changed-key",
+          contact_email: "other@example.com",
+          phone: "555-0100",
+        },
+      ],
+    });
+    expect(a).toBe(b);
+  });
+
+  it("is order-independent for stages and orgs", () => {
+    const stage2: StageRow = {
+      ...stage1,
+      id: 2,
+      stage: 2,
+      photo_hash: "hash2",
+      actor: "Bob",
+      actor_org_id: "org2",
+      tx_sig: "tx2",
+      created_at: 300,
+    };
+    const org2: PublicOrg = { ...org, id: "org2", name: "Cold Storage Co", role: "PROCESSOR" };
+
+    const a = buildReportFingerprint({
+      batch,
+      stages: [stage1, stage2],
+      orgs: [org, org2],
+    });
+    const b = buildReportFingerprint({
+      batch,
+      stages: [stage2, stage1],
+      orgs: [org2, org],
+    });
+    expect(a).toBe(b);
+  });
 });
