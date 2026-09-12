@@ -73,6 +73,14 @@ const SCHEMA_SQL = `
     actor_org_id TEXT REFERENCES orgs(id),
     UNIQUE(batch_id, stage)
   );
+  CREATE TABLE IF NOT EXISTS batch_reports (
+    batch_id TEXT PRIMARY KEY REFERENCES batches(id),
+    fingerprint TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    model TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
 `;
 
 export type BatchRow = {
@@ -278,4 +286,32 @@ export async function getOrgByEmail(email: string): Promise<OrgRow | undefined> 
 export async function listOrgs(): Promise<OrgRow[]> {
   await ready();
   return d1All<OrgRow>("SELECT * FROM orgs ORDER BY created_at DESC");
+}
+
+export type BatchReportRow = {
+  batch_id: string;
+  fingerprint: string;
+  report_json: string;
+  model: string;
+  created_at: number;
+  updated_at: number;
+};
+
+export async function getBatchReport(batchId: string): Promise<BatchReportRow | undefined> {
+  await ready();
+  return d1First<BatchReportRow>("SELECT * FROM batch_reports WHERE batch_id = ?", [batchId]);
+}
+
+export async function upsertBatchReport(row: BatchReportRow) {
+  await ready();
+  await d1Run(
+    `INSERT INTO batch_reports (batch_id, fingerprint, report_json, model, created_at, updated_at)
+     VALUES (?,?,?,?,?,?)
+     ON CONFLICT(batch_id) DO UPDATE SET
+       fingerprint=excluded.fingerprint,
+       report_json=excluded.report_json,
+       model=excluded.model,
+       updated_at=excluded.updated_at`,
+    [row.batch_id, row.fingerprint, row.report_json, row.model, row.created_at, row.updated_at],
+  );
 }

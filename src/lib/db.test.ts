@@ -139,4 +139,28 @@ describe("db over D1", () => {
     expect(pub).not.toHaveProperty("password_hash");
     expect(pub.contact_email).toBe("farm@example.com");
   });
+
+  describe("batch_reports cache", () => {
+    it("getBatchReport returns undefined when missing", async () => {
+      fetchMock.mockResolvedValue(d1Success([]));
+      const { getBatchReport } = await loadDb();
+      expect(await getBatchReport("ABCD")).toBeUndefined();
+    });
+
+    it("upsertBatchReport binds all columns", async () => {
+      fetchMock.mockResolvedValue(d1Success());
+      const { upsertBatchReport } = await loadDb();
+      await upsertBatchReport({
+        batch_id: "ABCD",
+        fingerprint: "fp",
+        report_json: "{}",
+        model: "openai/gpt-4o-mini",
+        created_at: 1,
+        updated_at: 2,
+      });
+      const body = JSON.parse(String(fetchMock.mock.calls[0][1].body));
+      expect(body.sql).toMatch(/INSERT INTO batch_reports/i);
+      expect(body.params).toEqual(["ABCD", "fp", "{}", "openai/gpt-4o-mini", 1, 2]);
+    });
+  });
 });
