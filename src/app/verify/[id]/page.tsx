@@ -40,7 +40,11 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
       const parsed = onChain ? parseStageValue(onChain.value) : null;
       const fileHash = row ? await hashFile(row.photo_file) : null;
       const match = !!row && !!parsed && fileHash === parsed.photoHash;
-      return { s, row, parsed, fileHash, match };
+      const snapshotHash = row ? createHash("sha256").update(row.org_snapshot).digest("hex") : null;
+      // Old stages recorded before this feature shipped have no on-chain snapshot hash to check
+      // against (parseStageValue defaults it to "") — treat that as "nothing to verify", not tampered.
+      const snapshotMatch = !parsed?.snapshotHash || snapshotHash === parsed.snapshotHash;
+      return { s, row, parsed, fileHash, match, snapshotHash, snapshotMatch };
     }),
   );
   const done = rows.filter((r) => r.row).length;
@@ -79,7 +83,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
       </div>
 
       <ol className="relative space-y-3">
-        {rows.map(({ s, row, parsed, fileHash, match }, i) => (
+        {rows.map(({ s, row, parsed, fileHash, match, snapshotMatch }, i) => (
           <li
             key={s.id}
             className="relative flex gap-3 animate-fade-in-up"
@@ -129,6 +133,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
                     <a className="text-forest-800 underline dark:text-olive-300" href={explorerUrl("tx", row.tx_sig)} target="_blank">
                       view tx
                     </a>
+                    <SnapshotDetails snapshotJson={row.org_snapshot} verified={snapshotMatch} />
                   </div>
                 </div>
               )}
@@ -139,6 +144,56 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
       <p className="text-center text-xs text-cream-600 dark:text-cream-500">
         <Link href="/" className="underline">← dashboard</Link>
       </p>
+    </div>
+  );
+}
+
+/** Human labels for snapshotOrgForStage's keys (see lib/db.ts) — falls back to a title-cased
+ * version of the raw key for any field not listed here. */
+const SNAPSHOT_LABELS: Record<string, string> = {
+  grid_region: "Grid region",
+  location_lat: "Latitude",
+  location_lng: "Longitude",
+  farm_type: "Farm type",
+  land_use_type: "Land use",
+  farming_practice: "Farming practice",
+  onsite_renewable_pct: "Onsite renewable %",
+  facility_type: "Facility type",
+  facility_energy_source: "Facility energy source",
+  facility_renewable_pct: "Facility renewable %",
+  fleet_type: "Fleet type",
+  refrigeration_type: "Refrigeration",
+  default_transport_mode: "Transport mode",
+  buyer_type: "Buyer type",
+  storage_type: "Storage type",
+  kitchen_energy_source: "Kitchen energy source",
+};
+
+function SnapshotDetails({ snapshotJson, verified }: { snapshotJson: string; verified: boolean }) {
+  let snapshot: Record<string, string | number>;
+  try {
+    snapshot = JSON.parse(snapshotJson);
+  } catch {
+    return null;
+  }
+  const entries = Object.entries(snapshot);
+  if (entries.length === 0) return null;
+  return (
+    <div className="mt-2 border-t border-cream-300 pt-2 dark:border-olive-700">
+      <p className="flex items-center gap-1.5 text-cream-600 dark:text-cream-400">
+        Org snapshot at record time
+        <span className={verified ? "text-forest-800 dark:text-forest-400" : "text-red-600 dark:text-red-400"}>
+          {verified ? "✓" : "✗ mismatch"}
+        </span>
+      </p>
+      <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
+        {entries.map(([key, value]) => (
+          <div key={key} className="contents">
+            <dt className="text-cream-600 dark:text-cream-400">{SNAPSHOT_LABELS[key] ?? key}</dt>
+            <dd className="text-olive-900 dark:text-cream-200">{String(value)}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
