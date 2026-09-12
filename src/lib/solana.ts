@@ -121,6 +121,48 @@ function sigToString(sig: Uint8Array) {
 
 export type Attr = { key: string; value: string };
 
+export function isBlockhashExpiredError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /block height exceeded|blockhash not found|BlockhashNotFound|BlockHeightExceeded/i.test(
+    msg,
+  );
+}
+
+type SendConfirmResult = { signature: Uint8Array };
+
+/**
+ * Rebuild + resend on expired blockhash. Cloudflare Worker → RPC latency often
+ * burns the ~60–90s blockhash window on the first attempt.
+ */
+export async function sendWithBlockhashRetry(
+  u: Umi,
+  build: () => {
+    sendAndConfirm: (
+      umi: Umi,
+      options?: {
+        send?: { maxRetries?: number; preflightCommitment?: "processed" | "confirmed" | "finalized" };
+        confirm?: { commitment?: "processed" | "confirmed" | "finalized" };
+      },
+    ) => Promise<SendConfirmResult>;
+  },
+  retries = 3,
+): Promise<SendConfirmResult> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      return await build().sendAndConfirm(u, {
+        send: { maxRetries: 5, preflightCommitment: "confirmed" },
+        confirm: { commitment: "confirmed" },
+      });
+    } catch (e) {
+      lastErr = e;
+      if (!isBlockhashExpiredError(e) || attempt >= retries - 1) throw e;
+      await sleep(400 * 2 ** attempt);
+    }
+  }
+  throw lastErr;
+}
+
 /** Mint one Core NFT for a batch. Initial attributes hold batch identity. */
 export async function mintBatchNft(input: {
   batchId: string;
@@ -134,12 +176,14 @@ export async function mintBatchNft(input: {
     { key: "origin", value: input.origin },
     { key: "created_at", value: String(Date.now()) },
   ];
-  const { signature } = await create(u, {
-    asset,
-    name: `FoodTrace ${input.name} #${input.batchId}`,
-    uri: `${BASE_URL}/api/metadata/${input.batchId}`,
-    plugins: [{ type: "Attributes", attributeList }],
-  }).sendAndConfirm(u, { confirm: { commitment: "finalized" } });
+  const { signature } = await sendWithBlockhashRetry(u, () =>
+    create(u, {
+      asset,
+      name: `FoodTrace ${input.name} #${input.batchId}`,
+      uri: `${BASE_URL}/api/metadata/${input.batchId}`,
+      plugins: [{ type: "Attributes", attributeList }],
+    }),
+  );
   return { asset: asset.publicKey.toString(), signature: sigToString(signature) };
 }
 
@@ -193,8 +237,30 @@ export async function recordStageOnChain(input: {
    * confirm the stored snapshot wasn't altered, the same way photoHash already does for photos. */
   snapshotHash: string;
 }) {
-  const u = await umiForAsset(input.asset);
-  const current = await readAttributes(input.asset);
+  const keys = loadServerSecretKeys();
+  const probe = umiForSecret(keys[0]!);
+  const assetPk = publicKey(input.asset);
+  const asset = await fetchAsset(probe, assetPk);
+  const ua = asset.updateAuthority;
+  const authority =
+    ua?.type === "Address" && ua.address ? String(ua.address) : null;
+  let u = probe;
+  if (authority) {
+    const match = keys.find(
+      (secret) => String(umiForSecret(secret).identity.publicKey) === authority,
+    );
+    if (!match) {
+      throw new Error(
+        `no server key matches update authority ${authority} for asset ${input.asset}`,
+      );
+    }
+    u = umiForSecret(match);
+  }
+
+  const current = (asset.attributes?.attributeList ?? []).map((x) => ({
+    key: x.key,
+    value: x.value,
+  }));
   const key = stageKey(input.stage);
   if (current.some((a) => a.key === key)) {
     throw new Error(`stage ${input.stage} already on-chain`);
@@ -203,9 +269,11 @@ export async function recordStageOnChain(input: {
     ...current,
     { key, value: stageValue(input.photoHash, input.ts, input.actor, input.snapshotHash) },
   ];
-  const { signature } = await updatePlugin(u, {
-    asset: publicKey(input.asset),
-    plugin: { type: "Attributes", attributeList },
-  }).sendAndConfirm(u);
+  const { signature } = await sendWithBlockhashRetry(u, () =>
+    updatePlugin(u, {
+      asset: assetPk,
+      plugin: { type: "Attributes", attributeList },
+    }),
+  );
   return { signature: sigToString(signature) };
 }
