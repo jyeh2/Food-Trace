@@ -32,7 +32,7 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
   const batch = getBatch(id.toUpperCase());
   if (!batch) notFound();
 
-  const local = listStages(batch.id);
+  const local = await listStages(batch.id);
   let chain: Awaited<ReturnType<typeof readAttributes>> = [];
   let chainErr = "";
   try {

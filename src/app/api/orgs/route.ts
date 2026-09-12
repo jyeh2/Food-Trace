@@ -22,7 +22,7 @@ function str(v: unknown): string | null {
 }
 
 export async function GET() {
-  return NextResponse.json({ orgs: listOrgs().map(toPublicOrg) });
+  return NextResponse.json({ orgs: (await listOrgs()).map(toPublicOrg) });
 }
 
 export async function POST(req: Request) {
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (getOrgByEmail(contact_email)) {
+  if (await getOrgByEmail(contact_email)) {
     return NextResponse.json({ error: "an org with that email already exists" }, { status: 409 });
   }
 
@@ -92,6 +92,6 @@ export async function POST(req: Request) {
     sustainability_program: str(body.sustainability_program),
   };
 
-  insertOrg(row);
+  await insertOrg(row);
   return NextResponse.json({ org: toPublicOrg(row) }, { status: 201 });
 }

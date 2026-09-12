@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { contact_email?: string; password?: string };
   const email = String(body.contact_email ?? "").trim().toLowerCase();
   const password = String(body.password ?? "");
-  const org = getOrgByEmail(email);
+  const org = await getOrgByEmail(email);
   if (!org || !org.active || !verifyPassword(password, org.password_hash)) {
     return NextResponse.json({ error: "invalid email or password" }, { status: 401 });
   }

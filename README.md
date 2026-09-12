@@ -9,9 +9,11 @@ that station at that moment.
 
 ```bash
 pnpm install
+# copy env.example → .env.local and fill secrets (Solana + Cloudflare D1)
 # fund the server wallet (devnet). Address:
 solana-keygen pubkey .keys/server.json
 # → https://faucet.solana.com (needs GitHub login) or `solana airdrop 2 <addr> -u devnet`
+pnpm db:migrate   # apply schema to the remote D1 database (wrangler login)
 pnpm dev
 ```
 
@@ -23,7 +25,19 @@ SOLANA_CLUSTER=devnet
 SERVER_KEYPAIR_PATH=.keys/server.json
 STATION_SECRET=change-me
 NEXT_PUBLIC_BASE_URL=http://localhost:3000     # use LAN IP for phone testing
+
+# Cloudflare D1 (HTTP API — required at runtime)
+CLOUDFLARE_ACCOUNT_ID=                         # dashboard → Workers → account id
+CLOUDFLARE_API_TOKEN=                          # token with Account / D1 / Edit
+CLOUDFLARE_D1_DATABASE_ID=5c1ae019-3071-4e88-9f91-b3da7ce6b2b8
+
+# OpenRouter (AI batch product reports)
+OPENROUTER_API_KEY=                            # required for /reports/[batch_id]
+OPENROUTER_MODEL=openai/gpt-4o-mini            # optional override
 ```
+
+The `/reports/[batch_id]` page uses `OPENROUTER_API_KEY` and optional
+`OPENROUTER_MODEL` to generate consumer-facing batch product reports via OpenRouter.
 
 ## Demo flow
 
@@ -77,7 +91,7 @@ not use `DEV_ALLOWED_ORIGINS`, but still requires camera permission.
 
 - `src/lib/totp.ts` — rotating station code (HMAC-SHA256, 30s step, ±1 window)
 - `src/lib/solana.ts` — Umi + mpl-core: mint, append stage attribute, read
-- `src/lib/db.ts` — SQLite (better-sqlite3) batches/stages; photos in `data/uploads`
+- `src/lib/db.ts` — Cloudflare D1 batches/stages/orgs; photos in `data/uploads`
 - `src/app/api/*` — batches, stages, station code, uploads, NFT metadata
 - `src/app/{page,scan,station,verify}` — UI
 
