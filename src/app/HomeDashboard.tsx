@@ -245,18 +245,26 @@ export function HomeDashboard() {
                 </Link>
                 <div className="text-xs text-cream-700">{b.origin}</div>
               </div>
-              <div className="flex gap-1">
-                {STAGES.map((s) => (
-                  <span
-                    key={s.id}
-                    title={s.label}
-                    className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-medium ${
-                      s.id <= b.last_stage ? "bg-forest-800 text-cream-50" : "bg-cream-200 text-cream-600"
-                    }`}
-                  >
-                    {s.id}
-                  </span>
-                ))}
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/reports/${b.id}`}
+                  className="text-xs text-forest-800 underline dark:text-olive-300"
+                >
+                  Report
+                </Link>
+                <div className="flex gap-1">
+                  {STAGES.map((s) => (
+                    <span
+                      key={s.id}
+                      title={s.label}
+                      className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-medium ${
+                        s.id <= b.last_stage ? "bg-forest-800 text-cream-50" : "bg-cream-200 text-cream-600"
+                      }`}
+                    >
+                      {s.id}
+                    </span>
+                  ))}
+                </div>
               </div>
             </li>
           ))}

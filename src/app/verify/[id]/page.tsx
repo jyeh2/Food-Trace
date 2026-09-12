@@ -76,6 +76,11 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
         </dl>
         {chainErr && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{chainErr}</p>}
         <ProductQr batchId={batch.id} />
+        <p className="mt-3 text-sm">
+          <Link href={`/reports/${batch.id}`} className="text-forest-800 underline dark:text-olive-300">
+            Product report
+          </Link>
+        </p>
       </div>
 
       <ol className="relative space-y-3">
