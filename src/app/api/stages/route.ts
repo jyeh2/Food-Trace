@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   if (!(photo instanceof File) || photo.size === 0) {
     return NextResponse.json({ error: "photo required" }, { status: 400 });
   }
-  const batch = getBatch(batchId);
+  const batch = await getBatch(batchId);
   if (!batch) {
     return NextResponse.json({ error: "unknown batch" }, { status: 404 });
   }
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       { status: 401 },
     );
   }
-  const expected = nextAllowedStage(lastStage(batchId));
+  const expected = nextAllowedStage(await lastStage(batchId));
   if (expected !== stage) {
     return NextResponse.json(
       {
@@ -88,7 +88,7 @@ export async function POST(req: Request) {
       created_at: ts,
       actor_org_id: org.id,
     };
-    insertStage(row);
+    await insertStage(row);
     return NextResponse.json({ stage: row }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

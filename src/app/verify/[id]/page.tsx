@@ -21,10 +21,10 @@ async function hashFile(file: string) {
 
 export default async function VerifyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const batch = getBatch(id.toUpperCase());
+  const batch = await getBatch(id.toUpperCase());
   if (!batch) notFound();
 
-  const local = listStages(batch.id);
+  const local = await listStages(batch.id);
   let chain: Awaited<ReturnType<typeof readAttributes>> = [];
   let chainErr = "";
   try {

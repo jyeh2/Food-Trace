@@ -8,7 +8,6 @@ const nextConfig: NextConfig = {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean)],
-  serverExternalPackages: ["better-sqlite3"],
 };
 
 export default nextConfig;
