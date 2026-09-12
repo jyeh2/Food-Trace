@@ -269,11 +269,23 @@ export async function recordStageOnChain(input: {
     ...current,
     { key, value: stageValue(input.photoHash, input.ts, input.actor, input.snapshotHash) },
   ];
-  const { signature } = await sendWithBlockhashRetry(u, () =>
-    updatePlugin(u, {
-      asset: assetPk,
-      plugin: { type: "Attributes", attributeList },
-    }),
-  );
-  return { signature: sigToString(signature) };
+  try {
+    const { signature } = await sendWithBlockhashRetry(u, () =>
+      updatePlugin(u, {
+        asset: assetPk,
+        plugin: { type: "Attributes", attributeList },
+      }),
+    );
+    return { signature: sigToString(signature) };
+  } catch (e) {
+    // Tx often lands before confirm notices expiry — treat present stage attr as success.
+    if (isBlockhashExpiredError(e)) {
+      const attrs = await readAttributes(input.asset);
+      const wrote = attrs.find((a) => a.key === key);
+      if (wrote) {
+        return { signature: "", recovered: true as const };
+      }
+    }
+    throw e;
+  }
 }

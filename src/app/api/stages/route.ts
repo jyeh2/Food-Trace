@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
-import { getBatch, insertStage, lastStage, snapshotOrgForStage } from "@/lib/db";
+import {
+  completeStageLocal,
+  getBatch,
+  getStage,
+  insertStage,
+  lastStage,
+  snapshotOrgForStage,
+} from "@/lib/db";
 import { putImage } from "@/lib/r2";
 import { nextAllowedStage, stageById } from "@/lib/stages";
 import { verifyStationCode } from "@/lib/totp";
-import { recordStageOnChain } from "@/lib/solana";
+import { parseStageValue, readAttributes, recordStageOnChain, stageKey } from "@/lib/solana";
 import { getSessionOrg } from "@/lib/auth";
 import { ROLE_LABELS, roleCanRecordStage } from "@/lib/orgs";
 
@@ -68,8 +75,11 @@ export async function POST(req: Request) {
       { status: 401 },
     );
   }
+
+  const existing = await getStage(batchId, stage);
+  const incompleteLocal = !!existing && !existing.photo_file;
   const expected = nextAllowedStage(await lastStage(batchId));
-  if (expected !== stage) {
+  if (expected !== stage && !incompleteLocal) {
     return NextResponse.json(
       {
         error:
@@ -96,33 +106,94 @@ export async function POST(req: Request) {
   const snapshotHash = createHash("sha256").update(orgSnapshotJson).digest("hex");
 
   try {
-    const { signature } = await recordStageOnChain({
-      asset: batch.asset,
-      stage,
-      photoHash,
-      ts,
-      actor,
-      snapshotHash,
-    });
+    let signature = existing?.tx_sig ?? "";
+
+    if (incompleteLocal) {
+      // Chain write already succeeded earlier; only attach local photo/metadata.
+      const attrs = await readAttributes(batch.asset);
+      const onChain = attrs.find((a) => a.key === stageKey(stage));
+      if (!onChain) {
+        return NextResponse.json(
+          { error: `stage ${stage} is incomplete locally but missing on-chain` },
+          { status: 409 },
+        );
+      }
+      const parsed = parseStageValue(onChain.value);
+      if (parsed.photoHash !== photoHash) {
+        return NextResponse.json(
+          {
+            error:
+              "photo does not match the on-chain fingerprint for this stage — use the original photo",
+          },
+          { status: 409 },
+        );
+      }
+      signature = existing!.tx_sig;
+    } else {
+      const written = await recordStageOnChain({
+        asset: batch.asset,
+        stage,
+        photoHash,
+        ts,
+        actor,
+        snapshotHash,
+      });
+      signature = written.signature || existing?.tx_sig || "";
+    }
+
     const contentType = photo.type === "image/png" ? "image/png" : "image/jpeg";
     await putImage(photoFile, bytes, contentType);
     const row = {
       batch_id: batchId,
       stage,
-      // R2 object key in bucket hack-cmu-26
       photo_file: photoFile,
       photo_hash: photoHash,
       note,
       actor,
       tx_sig: signature,
-      created_at: ts,
+      created_at: incompleteLocal ? existing!.created_at : ts,
       actor_org_id: org.id,
-      org_snapshot: orgSnapshotJson,
+      org_snapshot: incompleteLocal ? existing!.org_snapshot : orgSnapshotJson,
     };
-    await insertStage(row);
-    return NextResponse.json({ stage: row }, { status: 201 });
+    if (incompleteLocal) {
+      await completeStageLocal(row);
+    } else {
+      await insertStage(row);
+    }
+    return NextResponse.json({ stage: row }, { status: incompleteLocal ? 200 : 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    if (/already on-chain/i.test(msg)) {
+      // Orphaned chain write: finish D1/R2 if local row is missing.
+      const local = await getStage(batchId, stage);
+      if (!local) {
+        try {
+          const attrs = await readAttributes(batch.asset);
+          const onChain = attrs.find((a) => a.key === stageKey(stage));
+          const parsed = onChain ? parseStageValue(onChain.value) : null;
+          if (parsed && parsed.photoHash === photoHash) {
+            const contentType = photo.type === "image/png" ? "image/png" : "image/jpeg";
+            await putImage(photoFile, bytes, contentType);
+            const row = {
+              batch_id: batchId,
+              stage,
+              photo_file: photoFile,
+              photo_hash: photoHash,
+              note,
+              actor: parsed.actor || actor,
+              tx_sig: "",
+              created_at: parsed.ts || ts,
+              actor_org_id: org.id,
+              org_snapshot: orgSnapshotJson,
+            };
+            await insertStage(row);
+            return NextResponse.json({ stage: row }, { status: 201 });
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+    }
     return NextResponse.json({ error: `stage record failed: ${msg}` }, { status: 502 });
   }
 }

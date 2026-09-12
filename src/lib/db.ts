@@ -259,6 +259,17 @@ export async function listStages(batchId: string): Promise<StageRow[]> {
   return d1All<StageRow>("SELECT * FROM stages WHERE batch_id = ? ORDER BY stage ASC", [batchId]);
 }
 
+export async function getStage(
+  batchId: string,
+  stage: number,
+): Promise<StageRow | undefined> {
+  await ready();
+  return d1First<StageRow>(
+    "SELECT * FROM stages WHERE batch_id = ? AND stage = ?",
+    [batchId, stage],
+  );
+}
+
 export async function lastStage(batchId: string): Promise<number> {
   await ready();
   const row = await d1First<{ m: number | null }>(
@@ -283,6 +294,39 @@ export async function insertStage(s: Omit<StageRow, "id">) {
       s.created_at,
       s.actor_org_id,
       s.org_snapshot,
+    ],
+  );
+}
+
+/** Fill in photo/note/snapshot for a stage that landed on-chain before D1/R2 finished. */
+export async function completeStageLocal(s: {
+  batch_id: string;
+  stage: number;
+  photo_file: string;
+  photo_hash: string;
+  note: string;
+  actor: string;
+  tx_sig: string;
+  created_at: number;
+  actor_org_id: string | null;
+  org_snapshot: string;
+}) {
+  await ready();
+  await d1Run(
+    `UPDATE stages SET photo_file = ?, photo_hash = ?, note = ?, actor = ?, tx_sig = ?,
+      created_at = ?, actor_org_id = ?, org_snapshot = ?
+     WHERE batch_id = ? AND stage = ?`,
+    [
+      s.photo_file,
+      s.photo_hash,
+      s.note,
+      s.actor,
+      s.tx_sig,
+      s.created_at,
+      s.actor_org_id,
+      s.org_snapshot,
+      s.batch_id,
+      s.stage,
     ],
   );
 }
