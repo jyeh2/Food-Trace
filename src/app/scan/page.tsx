@@ -2,10 +2,12 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { STAGES } from "@/lib/stages";
+import { ROLE_LABELS, ROLE_STAGES, type OrgRole } from "@/lib/orgs";
 
 type Station = { s: number; c: string };
 type Step = "station" | "produce" | "photo" | "done";
 type Batch = { id: string; name: string; origin: string; last_stage: number };
+type SessionOrg = { id: string; name: string; role: OrgRole } | null;
 
 /** Map getUserMedia's DOMException names to plain-language causes. */
 function cameraErrorMessage(e: unknown): string {
@@ -45,8 +47,9 @@ const STEP_LABELS: { key: Step; label: string }[] = [
   { key: "photo", label: "Details" },
 ];
 
-/** Worker app: scan station QR, pick the product batch, add photo + details, submit. */
+/** Worker app: scan station QR, pick the product batch, add photo + details, submit. Requires a logged-in org. */
 export default function ScanPage() {
+  const [org, setOrg] = useState<SessionOrg | undefined>(undefined);
   const [station, setStation] = useState<Station | null>(null);
   const [stationConfirmed, setStationConfirmed] = useState(false);
   const [batchId, setBatchId] = useState("");
@@ -54,7 +57,6 @@ export default function ScanPage() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [note, setNote] = useState("");
-  const [actor, setActor] = useState("");
   const [scanning, setScanning] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -75,6 +77,13 @@ export default function ScanPage() {
   // same live scan can catch either QR type, so the camera shouldn't stop
   // and restart between these two steps.
   const cameraStep = step === "station" || step === "produce";
+
+  useEffect(() => {
+    fetch("/api/auth/me")
+      .then((r) => r.json())
+      .then((j) => setOrg(j.org))
+      .catch(() => setOrg(null));
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -118,6 +127,9 @@ export default function ScanPage() {
     // that throw isn't caught, it's an unhandled rejection: nothing shows,
     // no popup, no error banner, just silence.
     try {
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        throw new Error("Camera access requires trusted HTTPS. Open the HTTPS demo URL in Safari.");
+      }
       const { Html5Qrcode } = await import("html5-qrcode");
       const inst = new Html5Qrcode("reader");
       scannerRef.current = inst;
@@ -217,7 +229,6 @@ export default function ScanPage() {
     fd.set("stage", String(station.s));
     fd.set("code", station.c);
     fd.set("note", note);
-    fd.set("actor", actor || `station-${station.s}`);
     fd.set("photo", photo);
     try {
       const r = await fetch("/api/stages", { method: "POST", body: fd });
@@ -235,8 +246,28 @@ export default function ScanPage() {
   const stageMeta = station ? STAGES.find((s) => s.id === station.s) : null;
   const doneBatchId = batchId;
 
+  if (org === undefined) return null;
+  if (!org) {
+    return (
+      <div className="space-y-3">
+        <h1 className="text-lg font-semibold">Record a stage</h1>
+        <p className="rounded-2xl border border-cream-300 bg-cream-50 p-5 text-sm dark:border-olive-700 dark:bg-olive-800">
+          You need to be logged in as an org to record a stage.{" "}
+          <Link href="/login" className="text-forest-800 underline dark:text-olive-300">Log in</Link>
+          {" "}or{" "}
+          <Link href="/register" className="text-forest-800 underline dark:text-olive-300">register an org</Link>.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[calc(100vh-5rem)] flex-col gap-4">
+      <p className="text-sm text-cream-700 dark:text-cream-300">
+        Logged in as <span className="font-medium text-olive-900 dark:text-cream-100">{org.name}</span> ({ROLE_LABELS[org.role]}) — can record stage
+        {ROLE_STAGES[org.role].length === 1 ? "" : "s"} {ROLE_STAGES[org.role].join(", ") || "none"}.
+      </p>
+
       {step !== "done" && (
         <ol className="flex items-center justify-center gap-2 text-xs font-medium">
           {STEP_LABELS.map((s, i) => (
@@ -361,12 +392,6 @@ export default function ScanPage() {
               onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
             />
           </label>
-          <input
-            className="w-full rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
-            placeholder="Your name / role"
-            value={actor}
-            onChange={(e) => setActor(e.target.value)}
-          />
           <input
             className="w-full rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
             placeholder="Note (temp 4°C, lot, etc.)"

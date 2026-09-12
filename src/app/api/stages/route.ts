@@ -6,22 +6,35 @@ import { UPLOAD_DIR, getBatch, insertStage, lastStage } from "@/lib/db";
 import { nextAllowedStage, stageById } from "@/lib/stages";
 import { verifyStationCode } from "@/lib/totp";
 import { recordStageOnChain } from "@/lib/solana";
+import { getSessionOrg } from "@/lib/auth";
+import { ROLE_LABELS, roleCanRecordStage } from "@/lib/orgs";
 
 export const runtime = "nodejs";
 
 const SECRET = process.env.STATION_SECRET ?? "dev-station-secret-change-me";
 
 export async function POST(req: Request) {
+  const org = await getSessionOrg();
+  if (!org) {
+    return NextResponse.json({ error: "log in as an org to record a stage" }, { status: 401 });
+  }
+
   const form = await req.formData();
   const batchId = String(form.get("batchId") ?? "").trim().toUpperCase();
   const stage = Number(form.get("stage"));
   const code = String(form.get("code") ?? "");
   const note = String(form.get("note") ?? "").slice(0, 200);
-  const actor = String(form.get("actor") ?? "station").slice(0, 40);
+  const actor = org.name;
   const photo = form.get("photo");
 
   if (!stageById(stage)) {
     return NextResponse.json({ error: "unknown stage" }, { status: 400 });
+  }
+  if (!roleCanRecordStage(org.role, stage)) {
+    return NextResponse.json(
+      { error: `${ROLE_LABELS[org.role]} orgs cannot record stage ${stage}` },
+      { status: 403 },
+    );
   }
   if (!(photo instanceof File) || photo.size === 0) {
     return NextResponse.json({ error: "photo required" }, { status: 400 });
@@ -73,6 +86,7 @@ export async function POST(req: Request) {
       actor,
       tx_sig: signature,
       created_at: ts,
+      actor_org_id: org.id,
     };
     insertStage(row);
     return NextResponse.json({ stage: row }, { status: 201 });

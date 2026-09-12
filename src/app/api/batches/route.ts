@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { insertBatch, listBatches, lastStage } from "@/lib/db";
 import { mintBatchNft } from "@/lib/solana";
+import { getSessionOrg } from "@/lib/auth";
+import { ROLE_LABELS, roleCanMintBatch } from "@/lib/orgs";
 
 export const runtime = "nodejs";
 
@@ -10,6 +12,10 @@ function newBatchId() {
 }
 
 export async function GET() {
+  const org = await getSessionOrg();
+  if (!org) {
+    return NextResponse.json({ error: "log in to view batches" }, { status: 401 });
+  }
   const batches = listBatches().map((b) => ({
     ...b,
     last_stage: lastStage(b.id),
@@ -18,6 +24,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const org = await getSessionOrg();
+  if (!org) {
+    return NextResponse.json({ error: "log in as a farmer org to mint a batch" }, { status: 401 });
+  }
+  if (!roleCanMintBatch(org.role)) {
+    return NextResponse.json({ error: `${ROLE_LABELS[org.role]} orgs cannot mint batches` }, { status: 403 });
+  }
+
   const body = (await req.json().catch(() => ({}))) as {
     name?: string;
     origin?: string;
@@ -37,6 +51,7 @@ export async function POST(req: Request) {
       asset,
       mint_sig: signature,
       created_at: Date.now(),
+      farmer_org_id: org.id,
     };
     insertBatch(row);
     return NextResponse.json({ batch: row }, { status: 201 });

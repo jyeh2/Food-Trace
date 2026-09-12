@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
+import { AuthNav } from "@/components/AuthNav";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -38,8 +39,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <span className="text-cream-400">|</span>
             <Link href="/scan" className="text-cream-700 hover:text-olive-900 hover:underline">Scan</Link>
             <Link href="/station/1" className="text-cream-700 hover:text-olive-900 hover:underline">Stations</Link>
-            <span className="ml-auto rounded-full bg-forest-100 px-3 py-0.5 text-xs text-forest-800">
-              Solana devnet
+            <span className="ml-auto flex items-center gap-3">
+              <AuthNav />
+              <span className="rounded-full bg-forest-100 px-3 py-0.5 text-xs text-forest-800">
+                Solana devnet
+              </span>
             </span>
           </nav>
         </header>
