@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { UPLOAD_DIR, getBatch, listStages } from "@/lib/db";
+import { UPLOAD_DIR, getBatch, getOrgById, listStages } from "@/lib/db";
 import TracePreview from "./TracePreview";
 import { STAGES } from "@/lib/stages";
 import { explorerUrl, parseStageValue, readAttributes, stageKey } from "@/lib/solana";
@@ -40,7 +40,22 @@ export default async function VerifyPage({ params }: { params: Promise<{ id: str
       const parsed = onChain ? parseStageValue(onChain.value) : null;
       const fileHash = row ? await hashFile(row.photo_file) : null;
       const match = !!row && !!parsed && fileHash === parsed.photoHash;
-      return { s, row, parsed, fileHash, match, photoUrl: row ? `/api/uploads/${row.photo_file}` : undefined, txUrl: row ? explorerUrl("tx", row.tx_sig) : undefined };
+      const org = row?.actor_org_id ? getOrgById(row.actor_org_id) : undefined;
+      const hasLocation = org?.location_lat != null && org.location_lng != null;
+      return {
+        s,
+        row,
+        parsed,
+        fileHash,
+        match,
+        photoUrl: row ? `/api/uploads/${row.photo_file}` : undefined,
+        txUrl: row ? explorerUrl("tx", row.tx_sig) : undefined,
+        location: hasLocation ? {
+          lat: org.location_lat!,
+          lng: org.location_lng!,
+          label: org.grid_region || org.name,
+        } : undefined,
+      };
     }),
   );
   return <TracePreview key={batch.id} liveData={{ batch, rows, chainErr, assetUrl: explorerUrl("address", batch.asset), mintUrl: explorerUrl("tx", batch.mint_sig) }} />;

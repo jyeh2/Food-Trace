@@ -42,4 +42,13 @@ describe("isolated trace previews", () => {
     first.rows[0].row!.note = "changed";
     expect(createTracePreview("through-4").rows[0].row!.note).not.toBe("changed");
   });
+  it("provides one complete mock journey with a location for every stage", () => {
+    const complete = createTracePreview("through-4");
+    expect(complete.rows.map((row) => row.location?.label)).toEqual([
+      "Lancaster, Pennsylvania",
+      "Harrisburg, Pennsylvania",
+      "Pittsburgh Distribution Center",
+      "Pittsburgh Community Market",
+    ]);
+  });
 });
