@@ -237,15 +237,27 @@ export function HomeDashboard() {
           {batches.map((b) => (
             <li
               key={b.id}
-              className="flex items-center gap-3 px-4 py-3 text-sm transition-colors duration-150 hover:bg-cream-100 dark:hover:bg-olive-700"
+              className="flex flex-col gap-4 px-4 py-5 text-sm transition-colors duration-150 hover:bg-cream-100 dark:hover:bg-olive-700 sm:flex-row sm:items-center"
             >
-              <div className="flex-1">
-                <Link href={`/verify/${b.id}`} className="font-medium text-olive-900 hover:underline dark:text-cream-100">
-                  {b.name} <span className="font-mono text-cream-600 dark:text-cream-400">#{b.id}</span>
-                </Link>
-                <div className="text-xs text-cream-700 dark:text-cream-300">{b.origin}</div>
+              <div className="flex min-w-0 flex-1 items-center gap-4">
+                <Qr value={`${base}/verify/${b.id}`} size={128} />
+                <div className="min-w-0 flex-1">
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-forest-800 dark:text-olive-300">
+                    Product QR
+                  </p>
+                  <Link href={`/verify/${b.id}`} className="break-words font-medium text-olive-900 hover:underline dark:text-cream-100">
+                    {b.name} <span className="font-mono text-cream-600 dark:text-cream-400">#{b.id}</span>
+                  </Link>
+                  <div className="mt-1 break-words text-xs text-cream-700 dark:text-cream-300">{b.origin}</div>
+                  <p className="mt-2 max-w-xs text-xs text-cream-700 dark:text-cream-300">
+                    Scan to open the customer product page. Print this QR on the product label.
+                  </p>
+                  <Link href={`/verify/${b.id}`} className="mt-2 inline-block text-xs text-forest-800 underline dark:text-olive-300">
+                    Open product page
+                  </Link>
+                </div>
               </div>
-              <div className="flex gap-1">
+              <div className="flex gap-1 self-end sm:self-auto" aria-label={`${b.last_stage} of ${STAGES.length} stages recorded`}>
                 {STAGES.map((s) => (
                   <span
                     key={s.id}
