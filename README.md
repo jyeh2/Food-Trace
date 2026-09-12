@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FoodTrace
 
-## Getting Started
+Farm-to-shelf food provenance on Solana. Each batch is a Metaplex Core NFT;
+each supply-chain stage writes a photo hash into the NFT's on-chain attributes.
+Stage stations show a rotating (TOTP-style) QR so a scan proves presence at
+that station at that moment.
 
-First, run the development server:
+## Run
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+# fund the server wallet (devnet). Address:
+solana-keygen pubkey .keys/server.json
+# → https://faucet.solana.com (needs GitHub login) or `solana airdrop 2 <addr> -u devnet`
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env.local`:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```
+SOLANA_RPC_URL=https://api.devnet.solana.com   # or testnet
+SOLANA_CLUSTER=devnet
+SERVER_KEYPAIR_PATH=.keys/server.json
+STATION_SECRET=change-me
+STATION_DISPLAY_KEY=change-me-too   # station display pages open as /station/N?k=<this>
+NEXT_PUBLIC_BASE_URL=http://localhost:3000     # use LAN IP for phone testing
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Demo flow
 
-## Learn More
+1. `/` — create batch → mints NFT → shows product QR.
+2. `/station/1?k=<STATION_DISPLAY_KEY>` … `/station/4?k=…` — open on a laptop at
+   each stage; QR rotates every 30s. Key is remembered in sessionStorage. Without
+   it the code endpoint returns 401, so nobody can fetch codes remotely.
+3. `/scan` on a phone — scan station QR, scan product QR (or type ID), take
+   photo, submit. Server checks TOTP, hashes photo, updates NFT attributes.
+4. `/verify/<id>` — consumer view. Recomputes photo hashes vs on-chain values.
+   Edit a stored photo in `data/uploads/` → badge flips to TAMPERED.
 
-To learn more about Next.js, take a look at the following resources:
+`pnpm dev` runs with `--experimental-https` (self-signed via mkcert) so the
+phone camera works over LAN: open `https://<laptop-LAN-IP>:3000/scan` on the
+phone and accept the certificate warning once. `pnpm dev:http` for plain HTTP.
+Set `NEXT_PUBLIC_BASE_URL` to the LAN URL so NFT metadata URIs resolve.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Layout
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `src/lib/totp.ts` — rotating station code (HMAC-SHA256, 30s step, ±1 window)
+- `src/lib/solana.ts` — Umi + mpl-core: mint, append stage attribute, read
+- `src/lib/db.ts` — SQLite (better-sqlite3) batches/stages; photos in `data/uploads`
+- `src/app/api/*` — batches, stages, station code, uploads, NFT metadata
+- `src/app/{page,scan,station,verify}` — UI
 
-## Deploy on Vercel
+## Tests
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+pnpm test
+```

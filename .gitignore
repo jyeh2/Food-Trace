@@ -39,3 +39,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# app secrets/data
+/.keys
+/data
+
+# browser automation artifacts
+/.playwright-mcp
+
+certificates
