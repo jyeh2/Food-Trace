@@ -43,9 +43,9 @@ export function AuthNav({ consumer = false }: { consumer?: boolean }) {
       );
     }
     return (
-      <span className="flex items-center gap-3 text-sm">
-        <Link href="/login" className="text-cream-700 hover:text-olive-900 hover:underline">Log in</Link>
-        <Link href="/register" className="text-cream-700 hover:text-olive-900 hover:underline">Register org</Link>
+      <span className="flex min-w-0 shrink items-center gap-2 text-sm sm:gap-3">
+        <Link href="/login" className="shrink-0 text-cream-700 hover:text-olive-900 hover:underline">Log in</Link>
+        <Link href="/register" className="shrink-0 truncate text-cream-700 hover:text-olive-900 hover:underline">Register org</Link>
       </span>
     );
   }
@@ -70,11 +70,11 @@ export function AuthNav({ consumer = false }: { consumer?: boolean }) {
   }
 
   return (
-    <span className="flex items-center gap-3 text-sm">
-      <span className="text-cream-700 dark:text-cream-300">
+    <span className="flex min-w-0 shrink items-center gap-2 text-sm sm:gap-3">
+      <span className="min-w-0 truncate text-cream-700 dark:text-cream-300">
         {org.name} · <span className="font-mono text-xs">{ROLE_LABELS[org.role]}</span>
       </span>
-      <button onClick={logout} className="text-cream-700 hover:text-olive-900 hover:underline">Log out</button>
+      <button onClick={logout} className="shrink-0 text-cream-700 hover:text-olive-900 hover:underline">Log out</button>
     </span>
   );
 }

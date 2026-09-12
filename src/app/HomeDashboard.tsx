@@ -232,27 +232,27 @@ export function HomeDashboard() {
 
       <section>
         <h2 className="mb-2 text-base font-semibold">Batches</h2>
-        {batches.length === 0 && <p className="text-sm text-cream-700">None yet.</p>}
-        <ul className="divide-y divide-cream-300 overflow-hidden rounded-2xl border border-cream-300 bg-cream-50">
+        {batches.length === 0 && <p className="text-sm text-cream-700 dark:text-cream-300">None yet.</p>}
+        <ul className="divide-y divide-cream-300 overflow-hidden rounded-2xl border border-cream-300 bg-cream-50 dark:divide-olive-700 dark:border-olive-700 dark:bg-olive-800">
           {batches.map((b) => (
             <li
               key={b.id}
-              className="flex flex-col gap-4 px-4 py-5 text-sm transition-colors duration-150 hover:bg-cream-100 sm:flex-row sm:items-center"
+              className="flex flex-col gap-4 px-4 py-5 text-sm transition-colors duration-150 hover:bg-cream-100 dark:hover:bg-olive-700 sm:flex-row sm:items-center"
             >
               <div className="flex min-w-0 flex-1 items-center gap-4">
                 <Qr value={`${base}/verify/${b.id}`} size={128} />
                 <div className="min-w-0 flex-1">
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-forest-800">
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-forest-800 dark:text-olive-300">
                     Product QR
                   </p>
-                  <Link href={`/verify/${b.id}`} className="break-words font-medium hover:underline">
-                  {b.name} <span className="font-mono text-cream-600">#{b.id}</span>
+                  <Link href={`/verify/${b.id}`} className="break-words font-medium text-olive-900 hover:underline dark:text-cream-100">
+                    {b.name} <span className="font-mono text-cream-600 dark:text-cream-400">#{b.id}</span>
                   </Link>
-                  <div className="mt-1 break-words text-xs text-cream-700">{b.origin}</div>
-                  <p className="mt-2 max-w-xs text-xs text-cream-700">
+                  <div className="mt-1 break-words text-xs text-cream-700 dark:text-cream-300">{b.origin}</div>
+                  <p className="mt-2 max-w-xs text-xs text-cream-700 dark:text-cream-300">
                     Scan to open the customer product page. Print this QR on the product label.
                   </p>
-                  <Link href={`/verify/${b.id}`} className="mt-2 inline-block text-xs text-forest-800 underline">
+                  <Link href={`/verify/${b.id}`} className="mt-2 inline-block text-xs text-forest-800 underline dark:text-olive-300">
                     Open product page
                   </Link>
                 </div>
@@ -263,7 +263,9 @@ export function HomeDashboard() {
                     key={s.id}
                     title={s.label}
                     className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-medium ${
-                      s.id <= b.last_stage ? "bg-forest-800 text-cream-50" : "bg-cream-200 text-cream-600"
+                      s.id <= b.last_stage
+                        ? "bg-forest-800 text-cream-50"
+                        : "bg-cream-200 text-cream-600 dark:bg-olive-900 dark:text-cream-500"
                     }`}
                   >
                     {s.id}
