@@ -23,6 +23,7 @@ const stage1: StageRow = {
   tx_sig: "tx1",
   created_at: 200,
   actor_org_id: "org1",
+  org_snapshot: "{}",
 };
 
 const org: PublicOrg = {

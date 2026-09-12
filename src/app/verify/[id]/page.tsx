@@ -29,7 +29,7 @@ function parseOrgSnapshot(json: string): Record<string, string | number> | undef
 export default async function VerifyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (id.toLowerCase() === "demo") return <TracePreview liveData={null} />;
-  const batch = getBatch(id.toUpperCase());
+  const batch = await getBatch(id.toUpperCase());
   if (!batch) notFound();
 
   const local = await listStages(batch.id);

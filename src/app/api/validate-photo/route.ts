@@ -20,9 +20,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "log in as an org to validate a photo" }, { status: 401 });
   }
 
-  const apiKey = process.env.OPEN_ROUTER_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "OPEN_ROUTER_API_KEY is not set on the server" }, { status: 500 });
+    return NextResponse.json({ error: "OPENROUTER_API_KEY is not set on the server" }, { status: 500 });
   }
 
   const form = await req.formData();
