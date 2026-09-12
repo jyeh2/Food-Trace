@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Fraunces, Geist, Geist_Mono } from "next/font/google";
-import { AuthNav } from "@/components/AuthNav";
+import { SiteHeader } from "@/components/SiteHeader";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
@@ -51,6 +50,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             </span>
           </nav>
         </header>
+        <SiteHeader />
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
       </body>
     </html>

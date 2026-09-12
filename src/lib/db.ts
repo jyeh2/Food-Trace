@@ -104,6 +104,10 @@ export type StageRow = {
   tx_sig: string;
   created_at: number;
   actor_org_id: string | null;
+  /** JSON-encoded snapshot of the acting org's location + role-specific fields at record
+   * time — see snapshotOrgForStage. Kept as one column rather than a field per possible
+   * attribute so recording a stage never needs its own form. */
+  org_snapshot: string;
 };
 
 /** Wide table: common fields + every role-specific field, nullable unless relevant to the org's role. */
@@ -160,6 +164,37 @@ export function toPublicOrg(o: OrgRow): PublicOrg {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { password_hash, ...rest } = o;
   return rest;
+}
+
+/** Which of an org's role-specific OrgRow fields get snapshotted onto each stage it records. */
+const ROLE_SNAPSHOT_FIELDS: Record<OrgRole, (keyof OrgRow)[]> = {
+  FARMER: ["farm_type", "land_use_type", "farming_practice", "onsite_renewable_pct"],
+  PROCESSOR: ["facility_type", "facility_energy_source", "facility_renewable_pct"],
+  DISTRIBUTOR: ["fleet_type", "refrigeration_type", "default_transport_mode"],
+  BUYER: ["buyer_type", "storage_type", "kitchen_energy_source"],
+  SUPPLIER: ["facility_type", "default_transport_mode"],
+  ADMIN: [],
+  AUDITOR: [],
+};
+
+/**
+ * Snapshots an org's location + role-specific fields at the moment it records a stage, so a
+ * stage keeps the provenance data that was true then even if the org edits its profile later.
+ * Pulled straight from the org's existing profile — recording a stage never prompts for this,
+ * which matters live at a demo station. Missing profile fields fall back to placeholders so the
+ * snapshot is always presentable rather than full of nulls.
+ */
+export function snapshotOrgForStage(org: OrgRow): Record<string, string | number> {
+  const snapshot: Record<string, string | number> = {
+    grid_region: org.grid_region ?? "unspecified",
+    location_lat: org.location_lat ?? 0,
+    location_lng: org.location_lng ?? 0,
+  };
+  for (const field of ROLE_SNAPSHOT_FIELDS[org.role]) {
+    const value = org[field];
+    snapshot[field] = value === null || value === undefined ? "unspecified" : value;
+  }
+  return snapshot;
 }
 
 declare global {

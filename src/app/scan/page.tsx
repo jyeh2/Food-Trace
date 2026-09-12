@@ -105,6 +105,9 @@ export default function ScanPage() {
       const j = JSON.parse(text);
       if (j?.t === "station" && typeof j.s === "number" && typeof j.c === "string") {
         setStation({ s: j.s, c: j.c });
+        // Auto-advance past confirmation — scanning the station's rotating QR
+        // is itself the proof of presence, so there's nothing left to confirm.
+        setStationConfirmed(true);
         return "station";
       }
     } catch {
@@ -308,13 +311,11 @@ export default function ScanPage() {
           ) : (
             <>
               <p className="text-center text-lg font-medium">
-                {step === "station" && !station
+                {step === "station"
                   ? "Point camera at the station screen"
-                  : step === "station"
-                    ? "Station confirmed"
-                    : "Scan the product QR, or pick it below"}
+                  : "Scan the product QR, or pick it below"}
               </p>
-              {step === "station" && !station && (
+              {step === "station" && (
                 <p className="max-w-sm text-center text-sm text-cream-700 dark:text-cream-300">
                   Every stage starts by scanning the station where you are — this is what proves
                   presence, not just a claim.
@@ -352,16 +353,8 @@ export default function ScanPage() {
             id="reader"
             className={`w-full max-w-sm overflow-hidden rounded-xl bg-black transition-shadow ${
               cameraEnabled ? "" : "hidden"
-            } ${station && !stationConfirmed ? "ring-4 ring-green-500" : ""}`}
+            }`}
           />
-          {station && !stationConfirmed && (
-            <button
-              onClick={() => setStationConfirmed(true)}
-              className="w-full max-w-sm rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95 animate-pop-in"
-            >
-              Continue
-            </button>
-          )}
           {msg && !msg.ok && (
             <p className="rounded bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{msg.text}</p>
           )}
@@ -374,16 +367,21 @@ export default function ScanPage() {
           <div className="rounded-lg border border-cream-300 bg-cream-50 p-3 text-sm dark:border-olive-700 dark:bg-olive-800">
             <b>{stageMeta?.label}</b> · batch <span className="font-mono">{batchId}</span>
           </div>
-          {preview ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="preview" className="max-h-64 w-full rounded-xl object-cover" />
-          ) : (
-            <div className="flex h-48 w-full items-center justify-center rounded-xl border-2 border-dashed border-cream-400 dark:border-olive-600">
-              <CameraIcon className="h-10 w-10 text-cream-500 dark:text-cream-600" />
-            </div>
-          )}
-          <label className="w-full cursor-pointer rounded-full bg-forest-800 py-3 text-center font-medium text-cream-100 transition-transform active:scale-95">
-            {preview ? "Retake photo" : "Take photo — its hash goes on-chain"}
+          <label className="relative block w-full cursor-pointer overflow-hidden rounded-xl transition-transform active:scale-[0.98]">
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="preview" className="max-h-64 w-full rounded-xl object-cover" />
+            ) : (
+              <div className="flex h-48 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-cream-400 dark:border-olive-600">
+                <CameraIcon className="h-10 w-10 text-cream-500 dark:text-cream-600" />
+                <span className="text-sm text-cream-600 dark:text-cream-400">Tap to take a photo</span>
+              </div>
+            )}
+            {preview && (
+              <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-cream-100">
+                Retake photo
+              </span>
+            )}
             <input
               type="file"
               accept="image/*"
@@ -392,6 +390,7 @@ export default function ScanPage() {
               onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
             />
           </label>
+          <p className="text-center text-xs text-cream-600 dark:text-cream-400">The photo&apos;s hash goes on-chain.</p>
           <input
             className="w-full rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
             placeholder="Note (temp 4°C, lot, etc.)"
