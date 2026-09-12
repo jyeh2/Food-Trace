@@ -29,33 +29,90 @@ export const CLUSTER = process.env.SOLANA_CLUSTER ?? "devnet";
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
 
 declare global {
-  var __foodtrace_umi: Umi | undefined;
+  var __foodtrace_umi_by_key: Map<string, Umi> | undefined;
+}
+
+function secretFingerprint(secret: Uint8Array): string {
+  return Buffer.from(secret).toString("base64");
+}
+
+function parseSecretKeyJson(raw: string): Uint8Array {
+  return Uint8Array.from(JSON.parse(raw) as number[]);
+}
+
+/**
+ * All server signers. First entry is the mint/payer identity.
+ * Prefer SERVER_KEYPAIRS_JSON (JSON array of secret-key arrays) so older mint
+ * authorities stay available for UpdatePlugin on demo batches.
+ * Falls back to SERVER_KEYPAIR_JSON or SERVER_KEYPAIR_PATH.
+ */
+export function loadServerSecretKeys(): Uint8Array[] {
+  const multi = process.env.SERVER_KEYPAIRS_JSON?.trim();
+  if (multi) {
+    const parsed = JSON.parse(multi) as number[][];
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      throw new Error("SERVER_KEYPAIRS_JSON must be a non-empty JSON array of secret keys");
+    }
+    return parsed.map((k) => Uint8Array.from(k));
+  }
+  return [loadServerSecretKey()];
 }
 
 /** Workers have no filesystem — prefer SERVER_KEYPAIR_JSON; path is for local/dev. */
 export function loadServerSecretKey(): Uint8Array {
   const fromEnv = process.env.SERVER_KEYPAIR_JSON?.trim();
   if (fromEnv) {
-    return Uint8Array.from(JSON.parse(fromEnv));
+    return parseSecretKeyJson(fromEnv);
   }
   const kpPath = path.resolve(/*turbopackIgnore: true*/
     process.cwd(),
     process.env.SERVER_KEYPAIR_PATH ?? ".keys/server.json",
   );
-  return Uint8Array.from(JSON.parse(readFileSync(kpPath, "utf8")));
+  return parseSecretKeyJson(readFileSync(kpPath, "utf8"));
 }
 
-export function umi(): Umi {
-  if (globalThis.__foodtrace_umi) return globalThis.__foodtrace_umi;
-  const secret = loadServerSecretKey();
+function umiCache(): Map<string, Umi> {
+  if (!globalThis.__foodtrace_umi_by_key) {
+    globalThis.__foodtrace_umi_by_key = new Map();
+  }
+  return globalThis.__foodtrace_umi_by_key;
+}
+
+export function umiForSecret(secret: Uint8Array): Umi {
+  const fp = secretFingerprint(secret);
+  const cached = umiCache().get(fp);
+  if (cached) return cached;
   const u = createUmi(RPC_URL).use(mplCore());
   u.use(keypairIdentity(u.eddsa.createKeypairFromSecretKey(secret)));
-  globalThis.__foodtrace_umi = u;
+  umiCache().set(fp, u);
   return u;
+}
+
+/** Primary signer (first key) — used for minting new batches. */
+export function umi(): Umi {
+  return umiForSecret(loadServerSecretKeys()[0]!);
 }
 
 export function serverAddress() {
   return umi().identity.publicKey.toString();
+}
+
+/** Pick the server key whose pubkey matches the asset update authority. */
+export async function umiForAsset(assetAddr: string): Promise<Umi> {
+  const keys = loadServerSecretKeys();
+  const probe = umiForSecret(keys[0]!);
+  const asset = await fetchAsset(probe, publicKey(assetAddr));
+  const ua = asset.updateAuthority;
+  const authority =
+    ua?.type === "Address" && ua.address ? String(ua.address) : null;
+  if (!authority) return probe;
+  for (const secret of keys) {
+    const u = umiForSecret(secret);
+    if (String(u.identity.publicKey) === authority) return u;
+  }
+  throw new Error(
+    `no server key matches update authority ${authority} for asset ${assetAddr}`,
+  );
 }
 
 function sigToString(sig: Uint8Array) {
@@ -136,7 +193,7 @@ export async function recordStageOnChain(input: {
    * confirm the stored snapshot wasn't altered, the same way photoHash already does for photos. */
   snapshotHash: string;
 }) {
-  const u = umi();
+  const u = await umiForAsset(input.asset);
   const current = await readAttributes(input.asset);
   const key = stageKey(input.stage);
   if (current.some((a) => a.key === key)) {

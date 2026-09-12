@@ -1,21 +1,38 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { DEFAULT_SOLANA_RPC_URL, loadServerSecretKey } from "./solana";
+import {
+  DEFAULT_SOLANA_RPC_URL,
+  loadServerSecretKey,
+  loadServerSecretKeys,
+} from "./solana";
 
 describe("loadServerSecretKey", () => {
   const prevJson = process.env.SERVER_KEYPAIR_JSON;
   const prevPath = process.env.SERVER_KEYPAIR_PATH;
+  const prevMulti = process.env.SERVER_KEYPAIRS_JSON;
 
   afterEach(() => {
     if (prevJson === undefined) delete process.env.SERVER_KEYPAIR_JSON;
     else process.env.SERVER_KEYPAIR_JSON = prevJson;
     if (prevPath === undefined) delete process.env.SERVER_KEYPAIR_PATH;
     else process.env.SERVER_KEYPAIR_PATH = prevPath;
+    if (prevMulti === undefined) delete process.env.SERVER_KEYPAIRS_JSON;
+    else process.env.SERVER_KEYPAIRS_JSON = prevMulti;
   });
 
   it("reads SERVER_KEYPAIR_JSON when set (Workers)", () => {
     process.env.SERVER_KEYPAIR_JSON = "[1,2,3,4]";
     delete process.env.SERVER_KEYPAIR_PATH;
+    delete process.env.SERVER_KEYPAIRS_JSON;
     expect(Array.from(loadServerSecretKey())).toEqual([1, 2, 3, 4]);
+  });
+
+  it("reads SERVER_KEYPAIRS_JSON as the full signer set", () => {
+    process.env.SERVER_KEYPAIRS_JSON = "[[1,2],[3,4,5]]";
+    delete process.env.SERVER_KEYPAIR_JSON;
+    const keys = loadServerSecretKeys();
+    expect(keys).toHaveLength(2);
+    expect(Array.from(keys[0]!)).toEqual([1, 2]);
+    expect(Array.from(keys[1]!)).toEqual([3, 4, 5]);
   });
 });
 
