@@ -1,11 +1,12 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { Output, ToolLoopAgent, tool, stepCountIs } from "ai";
+import { generateText, Output, tool, stepCountIs } from "ai";
 import { z } from "zod";
 import {
   getBatch,
   getOrgById,
   listStages,
   toPublicOrg,
+  type PublicOrg,
 } from "./db";
 import { STAGES } from "./stages";
 import { readAttributes } from "./solana";
@@ -15,6 +16,40 @@ export const DEFAULT_REPORT_MODEL = "openai/gpt-4o-mini";
 
 function modelId() {
   return process.env.OPENROUTER_MODEL?.trim() || DEFAULT_REPORT_MODEL;
+}
+
+async function loadReportContext(id: string) {
+  const batch = await getBatch(id);
+  if (!batch) throw new Error(`batch ${id} not found`);
+
+  const stages = await listStages(id);
+  const orgIds = new Set<string>();
+  if (batch.farmer_org_id) orgIds.add(batch.farmer_org_id);
+  for (const s of stages) {
+    if (s.actor_org_id) orgIds.add(s.actor_org_id);
+  }
+  const orgs: PublicOrg[] = [];
+  for (const orgId of orgIds) {
+    const row = await getOrgById(orgId);
+    if (row) orgs.push(toPublicOrg(row));
+  }
+
+  let chainAttrs: { key: string; value: string }[] = [];
+  let chainError = "";
+  try {
+    chainAttrs = await readAttributes(batch.asset);
+  } catch (e) {
+    chainError = e instanceof Error ? e.message : String(e);
+  }
+
+  return {
+    batch,
+    stages,
+    catalog: STAGES,
+    orgs,
+    chainAttrs,
+    chainError: chainError || null,
+  };
 }
 
 export async function generateBatchReport(
@@ -28,34 +63,45 @@ export async function generateBatchReport(
   const id = batchId.toUpperCase();
   const openrouter = createOpenRouter({ apiKey });
   const model = modelId();
+  const context = await loadReportContext(id);
 
-  const agent = new ToolLoopAgent({
+  // Tools stay available for the agent loop; context is also inlined so the
+  // model can emit structured output even if it skips tool calls.
+  const result = await generateText({
     model: openrouter(model),
-    instructions: `You are FoodTrace's product report writer.
-Use tools to load the batch. Never invent stages, orgs, hashes, or transactions.
-Write consumer-friendly product/journey/trust copy grounded only in tool data.
+    system: `You are FoodTrace's product report writer.
+Never invent stages, orgs, hashes, or transactions beyond the provided data.
+Write consumer-friendly product/journey/trust copy grounded only in that data.
 Keep auditor fields strictly factual.
-Include all STAGES in journey (completed or pending).
-Return structured output matching the schema.`,
+Include every catalog stage in journey (completed or pending).
+If farmerOrg has no location, set location to "".
+Set generatedAt to an ISO timestamp.`,
+    prompt: `Generate the structured product report for batch ${id}.
+
+Batch context (JSON):
+${JSON.stringify(context, null, 2)}
+
+You may call tools to double-check, then return the structured report object.`,
     tools: {
       getBatchContext: tool({
-        description: "Load batch row and farmer org public profile for this report's batch only",
-        inputSchema: z.object({}),
+        description: "Reload batch row and farmer org public profile",
+        inputSchema: z.object({
+          reason: z.string().describe("Why you are reloading"),
+        }),
         execute: async () => {
           const batch = await getBatch(id);
           if (!batch) return { error: "batch not found" };
           const farmer = batch.farmer_org_id
             ? await getOrgById(batch.farmer_org_id)
             : undefined;
-          return {
-            batch,
-            farmerOrg: farmer ? toPublicOrg(farmer) : null,
-          };
+          return { batch, farmerOrg: farmer ? toPublicOrg(farmer) : null };
         },
       }),
       listBatchStages: tool({
-        description: "List recorded stages and the canonical stage catalog",
-        inputSchema: z.object({}),
+        description: "Reload recorded stages and stage catalog",
+        inputSchema: z.object({
+          reason: z.string().describe("Why you are reloading"),
+        }),
         execute: async () => {
           const stages = await listStages(id);
           return { catalog: STAGES, stages };
@@ -71,14 +117,15 @@ Return structured output matching the schema.`,
         },
       }),
       getChainAttributes: tool({
-        description: "Read on-chain NFT attributes for this batch's asset",
-        inputSchema: z.object({}),
+        description: "Read on-chain NFT attributes for this batch asset",
+        inputSchema: z.object({
+          reason: z.string().describe("Why you are reading chain state"),
+        }),
         execute: async () => {
           const batch = await getBatch(id);
           if (!batch) return { error: "batch not found" };
           try {
-            const attrs = await readAttributes(batch.asset);
-            return { attrs };
+            return { attrs: await readAttributes(batch.asset) };
           } catch (e) {
             return {
               error: e instanceof Error ? e.message : String(e),
@@ -92,12 +139,10 @@ Return structured output matching the schema.`,
     stopWhen: stepCountIs(12),
   });
 
-  const result = await agent.generate({
-    prompt: `Generate the product report for batch ${id}. Call tools first, then produce the structured report.`,
-  });
-
   if (!result.output) {
-    throw new Error("Agent did not return structured report output");
+    throw new Error(
+      `No structured report output (finishReason=${result.finishReason}, text=${(result.text ?? "").slice(0, 200)})`,
+    );
   }
 
   return { report: result.output, model };

@@ -30,13 +30,15 @@ export const batchReportSchema = z.object({
     batchId: z.string(),
     nftAsset: z.string(),
     mintTx: z.string(),
+    // OpenAI strict JSON schema requires every property key in `required`
+    // (no `.optional()`). Use empty string when location is unknown.
     farmerOrg: z
       .object({
         name: z.string(),
         role: z.string(),
         certifications: z.array(z.string()),
         verificationStatus: z.string(),
-        location: z.string().optional(),
+        location: z.string(),
       })
       .nullable(),
     stages: z.array(
