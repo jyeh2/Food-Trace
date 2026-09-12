@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { BatchReportData } from "@/lib/report-schema";
-import { explorerUrl } from "@/lib/solana";
+import { explorerUrl } from "@/lib/explorer";
 
 export function BatchReport({ report }: { report: BatchReportData }) {
   const { product, journey, trust, auditor, generatedAt } = report;

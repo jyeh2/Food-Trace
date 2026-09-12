@@ -14,9 +14,17 @@ import {
   type Umi,
 } from "@metaplex-foundation/umi";
 import { base58 } from "@metaplex-foundation/umi/serializers";
+import { explorerUrl } from "./explorer";
 
-export const RPC_URL =
-  process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
+export { explorerUrl };
+
+/**
+ * Public api.*.solana.com returns 403 from Cloudflare Workers.
+ * Default to MagicBlock's keyless devnet RPC (verified from Worker egress).
+ * Override with SOLANA_RPC_URL for Helius/QuickNode/etc.
+ */
+export const DEFAULT_SOLANA_RPC_URL = "https://rpc.magicblock.app/devnet";
+export const RPC_URL = process.env.SOLANA_RPC_URL?.trim() || DEFAULT_SOLANA_RPC_URL;
 export const CLUSTER = process.env.SOLANA_CLUSTER ?? "devnet";
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
 
@@ -48,10 +56,6 @@ export function umi(): Umi {
 
 export function serverAddress() {
   return umi().identity.publicKey.toString();
-}
-
-export function explorerUrl(kind: "address" | "tx", id: string) {
-  return `https://explorer.solana.com/${kind}/${id}?cluster=${CLUSTER}`;
 }
 
 function sigToString(sig: Uint8Array) {
