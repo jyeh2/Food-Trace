@@ -1,5 +1,24 @@
 name = "cmuhacks-food-trace"
+account_id = "4d38bd1c6da9280b84dae11bb89d5400"
+main = ".open-next/worker.js"
 compatibility_date = "2026-09-12"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
+
+# Creates DNS + cert on the oliverchou.dev zone (must be in this Cloudflare account).
+[[routes]]
+pattern = "foodtrace.oliverchou.dev"
+custom_domain = true
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+[[services]]
+binding = "WORKER_SELF_REFERENCE"
+service = "cmuhacks-food-trace"
+
+[images]
+binding = "IMAGES"
 
 [[d1_databases]]
 binding = "DB"

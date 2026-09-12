@@ -20,7 +20,13 @@ export default function LoginPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ contact_email, password }),
       });
-      const j = await r.json();
+      const text = await r.text();
+      let j: { error?: string } = {};
+      try {
+        j = text ? (JSON.parse(text) as { error?: string }) : {};
+      } catch {
+        throw new Error(text || `Login failed (${r.status})`);
+      }
       if (!r.ok) throw new Error(j.error ?? r.statusText);
       router.push("/");
       router.refresh();

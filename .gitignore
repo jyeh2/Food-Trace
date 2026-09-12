@@ -16,6 +16,10 @@
 # next.js
 /.next/
 /out/
+/.open-next
+
+# wrangler local secrets (do not commit)
+.dev.vars
 
 # production
 /build
@@ -56,3 +60,5 @@ certificates
 # unrelated scratch/reference material, not part of the app
 /food_carbon_chain
 /hotel_carbon_ca
+
+graphify-out/

@@ -25,6 +25,7 @@ SOLANA_CLUSTER=devnet
 SERVER_KEYPAIR_PATH=.keys/server.json
 STATION_SECRET=change-me
 NEXT_PUBLIC_BASE_URL=http://localhost:3000     # use LAN IP for phone testing
+# Production deploy uses https://foodtrace.oliverchou.dev
 
 # Cloudflare D1 (HTTP API — required at runtime)
 CLOUDFLARE_ACCOUNT_ID=                         # dashboard → Workers → account id
@@ -38,6 +39,23 @@ OPENROUTER_MODEL=openai/gpt-4o-mini            # optional override
 
 The `/reports/[batch_id]` page uses `OPENROUTER_API_KEY` and optional
 `OPENROUTER_MODEL` to generate consumer-facing batch product reports via OpenRouter.
+
+## Deploy (Cloudflare Workers)
+
+Production host: **https://foodtrace.oliverchou.dev** (Custom Domain on Worker `cmuhacks-food-trace`).
+
+`oliverchou.dev` must be in the same Cloudflare account you deploy with. First deploy creates the DNS record + certificate.
+
+```bash
+# one-time: upload secrets from .env.local (reads SERVER_KEYPAIR_PATH → SERVER_KEYPAIR_JSON)
+pnpm secrets:put
+# pnpm secrets:put --dry-run
+
+# NEXT_PUBLIC_* is inlined at build time (not a Worker secret):
+NEXT_PUBLIC_BASE_URL=https://foodtrace.oliverchou.dev pnpm deploy
+```
+
+`pnpm db:migrate` is unchanged (D1 already configured). Use Workers Paid if the gzipped Worker exceeds the free 3 MiB limit.
 
 ## Demo flow
 

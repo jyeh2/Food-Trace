@@ -24,13 +24,22 @@ declare global {
   var __foodtrace_umi: Umi | undefined;
 }
 
-export function umi(): Umi {
-  if (globalThis.__foodtrace_umi) return globalThis.__foodtrace_umi;
+/** Workers have no filesystem — prefer SERVER_KEYPAIR_JSON; path is for local/dev. */
+export function loadServerSecretKey(): Uint8Array {
+  const fromEnv = process.env.SERVER_KEYPAIR_JSON?.trim();
+  if (fromEnv) {
+    return Uint8Array.from(JSON.parse(fromEnv));
+  }
   const kpPath = path.resolve(/*turbopackIgnore: true*/
     process.cwd(),
     process.env.SERVER_KEYPAIR_PATH ?? ".keys/server.json",
   );
-  const secret = Uint8Array.from(JSON.parse(readFileSync(kpPath, "utf8")));
+  return Uint8Array.from(JSON.parse(readFileSync(kpPath, "utf8")));
+}
+
+export function umi(): Umi {
+  if (globalThis.__foodtrace_umi) return globalThis.__foodtrace_umi;
+  const secret = loadServerSecretKey();
   const u = createUmi(RPC_URL).use(mplCore());
   u.use(keypairIdentity(u.eddsa.createKeypairFromSecretKey(secret)));
   globalThis.__foodtrace_umi = u;
