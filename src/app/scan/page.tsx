@@ -4,7 +4,8 @@ import Link from "next/link";
 import { STAGES } from "@/lib/stages";
 
 type Station = { s: number; c: string };
-type Step = "scan" | "photo" | "details" | "done";
+type Step = "station" | "produce" | "photo" | "done";
+type Batch = { id: string; name: string; origin: string; last_stage: number };
 
 /** Map getUserMedia's DOMException names to plain-language causes. */
 function cameraErrorMessage(e: unknown): string {
@@ -39,18 +40,17 @@ function CameraIcon({ className }: { className?: string }) {
 }
 
 const STEP_LABELS: { key: Step; label: string }[] = [
-  { key: "scan", label: "Scan" },
-  { key: "photo", label: "Photo" },
-  { key: "details", label: "Details" },
-  { key: "done", label: "Done" },
+  { key: "station", label: "Scan Station" },
+  { key: "produce", label: "Select Produce" },
+  { key: "photo", label: "Details" },
 ];
 
-/** Worker app: scan station QR + product QR, take photo, submit — one full-screen step at a time. */
+/** Worker app: scan station QR, pick the product batch, add photo + details, submit. */
 export default function ScanPage() {
   const [station, setStation] = useState<Station | null>(null);
+  const [stationConfirmed, setStationConfirmed] = useState(false);
   const [batchId, setBatchId] = useState("");
-  const [manualBatch, setManualBatch] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
+  const [batches, setBatches] = useState<Batch[]>([]);
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [note, setNote] = useState("");
@@ -65,12 +65,29 @@ export default function ScanPage() {
   const step: Step =
     msg?.ok && lastTx
       ? "done"
-      : !confirmed || !station || !batchId
-        ? "scan"
-        : !photo
-          ? "photo"
-          : "details";
+      : !station || !stationConfirmed
+        ? "station"
+        : !batchId
+          ? "produce"
+          : "photo";
   const stepIndex = STEP_LABELS.findIndex((s) => s.key === step);
+  // Station and Select Produce share one continuous camera session — the
+  // same live scan can catch either QR type, so the camera shouldn't stop
+  // and restart between these two steps.
+  const cameraStep = step === "station" || step === "produce";
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/batches")
+      .then((r) => r.json())
+      .then((j) => {
+        if (alive) setBatches(j.batches ?? []);
+      })
+      .catch(console.error);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /** Returns which thing was decoded so the scanner knows whether to keep going. */
   function handleDecoded(text: string): "station" | "batch" | null {
@@ -145,18 +162,18 @@ export default function ScanPage() {
   // permission grab. enableCamera itself does that first start (it's the one
   // running inside the click). This effect only depends on `step`, not
   // `cameraEnabled` — it exists purely to restart the camera on later
-  // re-entries into the scan step (e.g. "Scan next"), which happens after
+  // re-entries into the scan steps (e.g. "Scan next"), which happens after
   // permission is already granted, so no gesture is needed there. If it also
   // depended on `cameraEnabled`, it would double-fire alongside enableCamera's
   // own call on the very first tap — two concurrent Html5Qrcode.start() calls
   // fighting over the same camera, which throws on the second one.
   useEffect(() => {
     if (!cameraEnabled) return;
-    if (step === "scan" && !scanning) {
+    if (cameraStep && !scanning) {
       const id = requestAnimationFrame(() => void startScan());
       return () => cancelAnimationFrame(id);
     }
-    if (step !== "scan" && scanning) void stopScan();
+    if (!cameraStep && scanning) void stopScan();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
@@ -183,9 +200,8 @@ export default function ScanPage() {
 
   function startOver() {
     setStation(null);
+    setStationConfirmed(false);
     setBatchId("");
-    setManualBatch(false);
-    setConfirmed(false);
     onPhoto(null);
     setNote("");
     setMsg(null);
@@ -221,38 +237,38 @@ export default function ScanPage() {
 
   return (
     <div className="flex min-h-[calc(100vh-5rem)] flex-col gap-4">
-      <ol className="flex items-center justify-center gap-2 text-xs font-medium">
-        {STEP_LABELS.map((s, i) => (
-          <li key={s.key} className="flex items-center gap-2">
-            <span
-              className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                i < stepIndex
-                  ? "bg-forest-800 text-cream-100"
-                  : i === stepIndex
+      {step !== "done" && (
+        <ol className="flex items-center justify-center gap-2 text-xs font-medium">
+          {STEP_LABELS.map((s, i) => (
+            <li key={s.key} className="flex items-center gap-2">
+              <span
+                className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                  i <= stepIndex
                     ? "bg-forest-800 text-cream-100"
                     : "bg-cream-300 text-cream-600 dark:bg-olive-800 dark:text-cream-600"
-              }`}
-            >
-              {i < stepIndex ? "✓" : i + 1}
-            </span>
-            <span className={i === stepIndex ? "text-olive-800 dark:text-cream-100" : "text-cream-600 dark:text-cream-500"}>
-              {s.label}
-            </span>
-            {i < STEP_LABELS.length - 1 && <span className="mx-1 h-px w-4 bg-cream-300 dark:bg-forest-800" />}
-          </li>
-        ))}
-      </ol>
+                }`}
+              >
+                {i < stepIndex ? "✓" : i + 1}
+              </span>
+              <span className={i === stepIndex ? "text-olive-800 dark:text-cream-100" : "text-cream-600 dark:text-cream-500"}>
+                {s.label}
+              </span>
+              {i < STEP_LABELS.length - 1 && <span className="mx-1 h-px w-4 bg-cream-300 dark:bg-forest-800" />}
+            </li>
+          ))}
+        </ol>
+      )}
 
-      {step === "scan" && (
+      {cameraStep && (
         <div className="flex flex-1 flex-col items-center gap-4 animate-fade-in-up">
           {!cameraEnabled ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
               <CameraIcon className="h-12 w-12 text-olive-600 dark:text-olive-300" />
               <p className="text-lg font-medium">Camera access is required</p>
               <p className="max-w-sm text-sm text-cream-700 dark:text-cream-300">
-                Every stage must be verified by scanning the station&apos;s rotating QR code. It
-                can&apos;t be typed in — that&apos;s what proves someone was physically at the
-                station, not just claiming to be.
+                The station must be verified by scanning its rotating QR code. It can&apos;t be
+                typed in — that&apos;s what proves someone was physically at the station, not
+                just claiming to be.
               </p>
               <button onClick={enableCamera} className="rounded-full bg-forest-800 px-6 py-3 font-medium text-cream-100 transition-transform active:scale-95">
                 Enable camera
@@ -261,38 +277,38 @@ export default function ScanPage() {
           ) : (
             <>
               <p className="text-center text-lg font-medium">
-                {!station ? "Point camera at the station screen" : "Now scan the product QR"}
+                {step === "station" && !station
+                  ? "Point camera at the station screen"
+                  : step === "station"
+                    ? "Station confirmed"
+                    : "Scan the product QR, or pick it below"}
               </p>
-              {!manualBatch ? (
-                <button onClick={() => setManualBatch(true)} className="text-sm text-forest-800 underline dark:text-olive-300">
-                  Can&apos;t scan the product? Type the batch ID instead
-                </button>
-              ) : (
-                <input
-                  autoFocus
-                  className="w-full max-w-sm rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-center font-mono uppercase text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
-                  placeholder="Batch ID"
-                  value={batchId}
-                  onChange={(e) => setBatchId(e.target.value.toUpperCase())}
-                />
-              )}
-              {station && (
-                <p className="rounded-full bg-olive-100 px-3 py-1 text-sm text-olive-800 dark:bg-forest-800 dark:text-cream-100">
-                  {stageMeta?.label} scanned ✓
+              {step === "station" && !station && (
+                <p className="max-w-sm text-center text-sm text-cream-700 dark:text-cream-300">
+                  Every stage starts by scanning the station where you are — this is what proves
+                  presence, not just a claim.
                 </p>
               )}
-              {batchId && (
-                <p className="rounded-full bg-olive-100 px-3 py-1 text-sm text-olive-800 dark:bg-forest-800 dark:text-cream-100">
-                  Batch {batchId} ready ✓
-                </p>
-              )}
-              {station && batchId && (
-                <button
-                  onClick={() => setConfirmed(true)}
-                  className="w-full max-w-sm rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95"
-                >
-                  Next
-                </button>
+              {step === "produce" && (
+                <>
+                  <p className="rounded-full bg-olive-100 px-3 py-1 text-sm text-olive-800 dark:bg-forest-800 dark:text-cream-100">
+                    {stageMeta?.label} scanned ✓
+                  </p>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => e.target.value && setBatchId(e.target.value)}
+                    className="w-full max-w-sm rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-center font-mono text-olive-900 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
+                  >
+                    <option value="" disabled>
+                      Or choose a batch…
+                    </option>
+                    {batches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name} — #{b.id}
+                      </option>
+                    ))}
+                  </select>
+                </>
               )}
             </>
           )}
@@ -303,8 +319,18 @@ export default function ScanPage() {
               dynamic-import call that follows it. Hidden via CSS instead. */}
           <div
             id="reader"
-            className={`w-full max-w-sm overflow-hidden rounded-xl bg-black ${cameraEnabled ? "" : "hidden"}`}
+            className={`w-full max-w-sm overflow-hidden rounded-xl bg-black transition-shadow ${
+              cameraEnabled ? "" : "hidden"
+            } ${station && !stationConfirmed ? "ring-4 ring-green-500" : ""}`}
           />
+          {station && !stationConfirmed && (
+            <button
+              onClick={() => setStationConfirmed(true)}
+              className="w-full max-w-sm rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95 animate-pop-in"
+            >
+              Continue
+            </button>
+          )}
           {msg && !msg.ok && (
             <p className="rounded bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{msg.text}</p>
           )}
@@ -312,18 +338,21 @@ export default function ScanPage() {
       )}
 
       {step === "photo" && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 animate-fade-in-up">
-          <p className="text-center text-lg font-medium">Take a photo — its hash goes on-chain</p>
+        <div className="flex flex-1 flex-col gap-3 animate-fade-in-up">
+          <p className="text-center text-lg font-medium">Add a photo and details</p>
+          <div className="rounded-lg border border-cream-300 bg-cream-50 p-3 text-sm dark:border-olive-700 dark:bg-olive-800">
+            <b>{stageMeta?.label}</b> · batch <span className="font-mono">{batchId}</span>
+          </div>
           {preview ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="preview" className="max-h-80 w-full max-w-sm rounded-xl object-cover" />
+            <img src={preview} alt="preview" className="max-h-64 w-full rounded-xl object-cover" />
           ) : (
-            <div className="flex h-64 w-full max-w-sm items-center justify-center rounded-xl border-2 border-dashed border-cream-400 dark:border-olive-600">
+            <div className="flex h-48 w-full items-center justify-center rounded-xl border-2 border-dashed border-cream-400 dark:border-olive-600">
               <CameraIcon className="h-10 w-10 text-cream-500 dark:text-cream-600" />
             </div>
           )}
-          <label className="w-full max-w-sm cursor-pointer rounded-full bg-forest-800 py-3 text-center font-medium text-cream-100 transition-transform active:scale-95">
-            {preview ? "Retake photo" : "Open camera"}
+          <label className="w-full cursor-pointer rounded-full bg-forest-800 py-3 text-center font-medium text-cream-100 transition-transform active:scale-95">
+            {preview ? "Retake photo" : "Take photo — its hash goes on-chain"}
             <input
               type="file"
               accept="image/*"
@@ -332,19 +361,6 @@ export default function ScanPage() {
               onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
             />
           </label>
-        </div>
-      )}
-
-      {step === "details" && (
-        <div className="flex flex-1 flex-col gap-3 animate-fade-in-up">
-          <p className="text-center text-lg font-medium">Confirm details</p>
-          <div className="rounded-lg border border-cream-300 bg-cream-50 p-3 text-sm dark:border-olive-700 dark:bg-olive-800">
-            <b>{stageMeta?.label}</b> · batch <span className="font-mono">{batchId}</span>
-          </div>
-          {preview && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="preview" className="h-32 w-full rounded-lg object-cover" />
-          )}
           <input
             className="w-full rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
             placeholder="Your name / role"
@@ -358,7 +374,7 @@ export default function ScanPage() {
             onChange={(e) => setNote(e.target.value)}
           />
           <button
-            disabled={busy}
+            disabled={!photo || busy}
             onClick={submit}
             className="mt-auto w-full rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95 disabled:opacity-40"
           >
