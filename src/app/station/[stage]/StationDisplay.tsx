@@ -68,8 +68,8 @@ export function StationDisplay({ stage }: { stage: string }) {
         </div>
       </div>
       <p className="max-w-md text-center text-sm text-cream-600 dark:text-cream-400">
-        Code = HMAC(secret, stage, ⌊t/30s⌋). Server accepts ±1 window. A photo of this QR
-        stops working within a minute, so a scan proves presence here, now.
+        Code = HMAC(secret, stage, ⌊t/90s⌋). Server accepts ±1 window. A photo of this QR
+        stops working within a few minutes, so a scan proves presence here, now.
       </p>
     </div>
   );

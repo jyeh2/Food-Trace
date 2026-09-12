@@ -9,7 +9,7 @@ Farm-to-shelf provenance on Solana. Each batch is a Metaplex Core NFT; each stag
 ## Demo
 
 1. `/` — mint a batch NFT → product QR
-2. `/station/1`…`/4` — display rotating station QR (30s)
+2. `/station/1`…`/4` — display rotating station QR (1.5 min)
 3. `/scan` — scan station + product, take photo, submit
 4. `/verify/<id>` — check photo hashes vs on-chain (tamper flips badge)
 

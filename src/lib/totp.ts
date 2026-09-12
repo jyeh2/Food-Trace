@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export const TOTP_STEP_MS = 30_000;
+export const TOTP_STEP_MS = 90_000; // 1.5 min
 const CODE_LEN = 8;
 
 function counterFor(nowMs: number) {
