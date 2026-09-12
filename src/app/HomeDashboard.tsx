@@ -232,18 +232,18 @@ export function HomeDashboard() {
 
       <section>
         <h2 className="mb-2 text-base font-semibold">Batches</h2>
-        {batches.length === 0 && <p className="text-sm text-cream-700">None yet.</p>}
-        <ul className="divide-y divide-cream-300 overflow-hidden rounded-2xl border border-cream-300 bg-cream-50">
+        {batches.length === 0 && <p className="text-sm text-cream-700 dark:text-cream-300">None yet.</p>}
+        <ul className="divide-y divide-cream-300 overflow-hidden rounded-2xl border border-cream-300 bg-cream-50 dark:divide-olive-700 dark:border-olive-700 dark:bg-olive-800">
           {batches.map((b) => (
             <li
               key={b.id}
-              className="flex items-center gap-3 px-4 py-3 text-sm transition-colors duration-150 hover:bg-cream-100"
+              className="flex items-center gap-3 px-4 py-3 text-sm transition-colors duration-150 hover:bg-cream-100 dark:hover:bg-olive-700"
             >
               <div className="flex-1">
-                <Link href={`/verify/${b.id}`} className="font-medium hover:underline">
-                  {b.name} <span className="font-mono text-cream-600">#{b.id}</span>
+                <Link href={`/verify/${b.id}`} className="font-medium text-olive-900 hover:underline dark:text-cream-100">
+                  {b.name} <span className="font-mono text-cream-600 dark:text-cream-400">#{b.id}</span>
                 </Link>
-                <div className="text-xs text-cream-700">{b.origin}</div>
+                <div className="text-xs text-cream-700 dark:text-cream-300">{b.origin}</div>
               </div>
               <div className="flex gap-1">
                 {STAGES.map((s) => (
@@ -251,7 +251,9 @@ export function HomeDashboard() {
                     key={s.id}
                     title={s.label}
                     className={`flex h-5 w-5 items-center justify-center rounded-full text-xs font-medium ${
-                      s.id <= b.last_stage ? "bg-forest-800 text-cream-50" : "bg-cream-200 text-cream-600"
+                      s.id <= b.last_stage
+                        ? "bg-forest-800 text-cream-50"
+                        : "bg-cream-200 text-cream-600 dark:bg-olive-900 dark:text-cream-500"
                     }`}
                   >
                     {s.id}
