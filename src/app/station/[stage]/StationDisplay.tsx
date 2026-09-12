@@ -41,12 +41,12 @@ export function StationDisplay({ stage }: { stage: string }) {
 
   return (
     <div className="flex flex-col items-center gap-6">
-      <div className="flex flex-wrap justify-center gap-2 text-sm">
+      <div className="grid w-full max-w-sm grid-cols-2 gap-2 text-sm sm:flex sm:w-auto sm:max-w-none sm:flex-wrap sm:justify-center">
         {STAGES.map((s) => (
           <Link
             key={s.id}
             href={`/station/${s.id}`}
-            className={`rounded-full px-3 py-1 transition-colors ${s.id === meta.id ? "bg-forest-800 text-cream-100" : "border border-cream-300 bg-cream-50 hover:bg-cream-100 dark:border-olive-700 dark:bg-olive-800 dark:hover:bg-forest-800/60"}`}
+            className={`rounded-full px-3 py-1 text-center transition-colors ${s.id === meta.id ? "bg-forest-800 text-cream-100" : "border border-cream-300 bg-cream-50 hover:bg-cream-100 dark:border-olive-700 dark:bg-olive-800 dark:hover:bg-forest-800/60"}`}
           >
             {s.id}. {s.label}
           </Link>

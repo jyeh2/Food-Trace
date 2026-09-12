@@ -65,7 +65,15 @@ export default function ScanPage() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [lastTx, setLastTx] = useState("");
+  const [webcamOpen, setWebcamOpen] = useState(false);
+  const [webcamError, setWebcamError] = useState("");
   const scannerRef = useRef<{ stop: () => Promise<void> } | null>(null);
+  const webcamVideoRef = useRef<HTMLVideoElement | null>(null);
+  const webcamStreamRef = useRef<MediaStream | null>(null);
+  // Phones already get a native camera/gallery chooser from <input capture>,
+  // so only desktop (no such chooser — it's just Finder either way) gets the
+  // in-page getUserMedia webcam flow below.
+  const isMobileDevice = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   const step: Step =
     msg?.ok && lastTx
@@ -108,9 +116,6 @@ export default function ScanPage() {
       const j = JSON.parse(text);
       if (j?.t === "station" && typeof j.s === "number" && typeof j.c === "string") {
         setStation({ s: j.s, c: j.c });
-        // Auto-advance past confirmation — scanning the station's rotating QR
-        // is itself the proof of presence, so there's nothing left to confirm.
-        setStationConfirmed(true);
         return "station";
       }
     } catch {
@@ -209,6 +214,44 @@ export default function ScanPage() {
     }
     setCameraEnabled(true);
     await startScan();
+  }
+
+  useEffect(() => {
+    if (webcamOpen && webcamVideoRef.current && webcamStreamRef.current) {
+      webcamVideoRef.current.srcObject = webcamStreamRef.current;
+    }
+  }, [webcamOpen]);
+  useEffect(() => () => void webcamStreamRef.current?.getTracks().forEach((t) => t.stop()), []);
+
+  async function openWebcam() {
+    setWebcamError("");
+    try {
+      webcamStreamRef.current = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+      setWebcamOpen(true);
+    } catch (e) {
+      setWebcamError(cameraErrorMessage(e));
+    }
+  }
+
+  function closeWebcam() {
+    webcamStreamRef.current?.getTracks().forEach((t) => t.stop());
+    webcamStreamRef.current = null;
+    setWebcamOpen(false);
+  }
+
+  function captureWebcamPhoto() {
+    const video = webcamVideoRef.current;
+    if (!video) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob((blob) => {
+      if (blob) onPhoto(new File([blob], "webcam-photo.jpg", { type: "image/jpeg" }));
+      closeWebcam();
+    }, "image/jpeg", 0.9);
   }
 
   function onPhoto(f: File | null) {
@@ -340,11 +383,13 @@ export default function ScanPage() {
           ) : (
             <>
               <p className="text-center text-lg font-medium">
-                {step === "station"
+                {step === "station" && !station
                   ? "Point camera at the station screen"
-                  : "Scan the product QR, or pick it below"}
+                  : step === "station"
+                    ? "Station confirmed"
+                    : "Scan the product QR, or pick it below"}
               </p>
-              {step === "station" && (
+              {step === "station" && !station && (
                 <p className="max-w-sm text-center text-sm text-cream-700 dark:text-cream-300">
                   Every stage starts by scanning the station where you are — this is what proves
                   presence, not just a claim.
@@ -382,8 +427,16 @@ export default function ScanPage() {
             id="reader"
             className={`w-full max-w-sm overflow-hidden rounded-xl bg-black transition-shadow ${
               cameraEnabled ? "" : "hidden"
-            }`}
+            } ${station && !stationConfirmed ? "ring-4 ring-green-500" : ""}`}
           />
+          {station && !stationConfirmed && (
+            <button
+              onClick={() => setStationConfirmed(true)}
+              className="w-full max-w-sm rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95 animate-pop-in"
+            >
+              Continue
+            </button>
+          )}
           {msg && !msg.ok && (
             <p className="rounded bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{msg.text}</p>
           )}
@@ -405,29 +458,14 @@ export default function ScanPage() {
                 : ""
             }`}
           >
-            <label className="relative block h-full w-full cursor-pointer transition-transform active:scale-[0.98]">
-              {preview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={preview} alt="preview" className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-2 border-2 border-dashed border-cream-400 dark:border-olive-600">
-                  <CameraIcon className="h-10 w-10 text-cream-500 dark:text-cream-600" />
-                  <span className="text-sm text-cream-600 dark:text-cream-400">Tap to take a photo</span>
-                </div>
-              )}
-              {preview && (
-                <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-cream-100">
-                  Retake photo
-                </span>
-              )}
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
-              />
-            </label>
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="preview" className="h-full w-full object-cover" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center border-2 border-dashed border-cream-400 dark:border-olive-600">
+                <CameraIcon className="h-10 w-10 text-cream-500 dark:text-cream-600" />
+              </div>
+            )}
           </div>
           <p className="text-center text-xs text-cream-600 dark:text-cream-400">The photo&apos;s hash goes on-chain.</p>
           {validation && "error" in validation && (
@@ -447,6 +485,67 @@ export default function ScanPage() {
                 {validation.matches ? "✓ Validation success" : "✗ Validation failed, please upload the correct photo"}
               </p>
               <p className="mt-0.5 opacity-80">{validation.reasoning}</p>
+            </div>
+          )}
+          <div className="flex w-full gap-3">
+            {isMobileDevice ? (
+              <label className="flex-1 cursor-pointer rounded-full bg-forest-800 py-3 text-center font-medium text-cream-100 transition-transform active:scale-95">
+                Take Photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            ) : (
+              <button
+                type="button"
+                onClick={openWebcam}
+                className="flex-1 rounded-full bg-forest-800 py-3 text-center font-medium text-cream-100 transition-transform active:scale-95"
+              >
+                Take Photo
+              </button>
+            )}
+            <label className="flex-1 cursor-pointer rounded-full bg-forest-800 py-3 text-center font-medium text-cream-100 transition-transform active:scale-95">
+              Photo Library
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
+          {webcamError && (
+            <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">{webcamError}</p>
+          )}
+          {webcamOpen && (
+            <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black/80 p-4">
+              <video
+                ref={webcamVideoRef}
+                autoPlay
+                playsInline
+                muted
+                className="max-h-[70vh] w-full max-w-md rounded-xl bg-black object-cover"
+              />
+              <div className="flex w-full max-w-md gap-3">
+                <button
+                  type="button"
+                  onClick={closeWebcam}
+                  className="flex-1 rounded-full border border-cream-300 bg-cream-50 py-3 font-medium text-olive-900 transition-transform active:scale-95 dark:border-olive-600 dark:bg-olive-800 dark:text-cream-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={captureWebcamPhoto}
+                  className="flex-1 rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95"
+                >
+                  Capture
+                </button>
+              </div>
             </div>
           )}
           {photo && (
