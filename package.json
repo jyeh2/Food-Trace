@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "dev:https": "next dev --experimental-https",
+    "dev:https": "next dev --experimental-https --experimental-https-key ./certificates/localhost-key.pem --experimental-https-cert ./certificates/localhost.pem",
     "dev:http": "next dev",
     "build": "next build",
     "start": "next start",
@@ -43,7 +43,6 @@
       "better-sqlite3",
       "bufferutil",
       "utf-8-validate"
-      "better-sqlite3"
     ]
   }
 }
