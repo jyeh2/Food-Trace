@@ -7,17 +7,17 @@ export function ProductQr({ batchId }: { batchId: string }) {
   const [url, setUrl] = useState("");
   const open = url !== "";
   return (
-    <div className="mt-3 border-t border-stone-100 pt-3">
+    <div className="mt-3 border-t border-stone-100 pt-3 dark:border-stone-800">
       <button
         onClick={() => setUrl(open ? "" : `${window.location.origin}/verify/${batchId}`)}
-        className="text-xs text-emerald-700 underline"
+        className="text-xs text-emerald-700 underline dark:text-emerald-400"
       >
         {open ? "Hide" : "Show"} product QR
       </button>
       {open && (
         <div className="mt-2 flex flex-col items-center gap-2 sm:flex-row">
           <Qr value={url} size={160} />
-          <div className="text-xs text-stone-600">
+          <div className="text-xs text-stone-600 dark:text-stone-300">
             <p>Print on the product label.</p>
             <p className="break-all font-mono">{url}</p>
             <button onClick={() => window.print()} className="mt-1 underline">

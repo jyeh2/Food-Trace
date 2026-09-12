@@ -124,11 +124,11 @@ export default function ScanPage() {
       <div id="reader" className={`overflow-hidden rounded-lg bg-black ${scanning ? "" : "hidden"}`} />
       <div className="flex gap-2">
         {!scanning ? (
-          <button onClick={startScan} className="rounded bg-stone-900 px-4 py-2 text-white">
+          <button onClick={startScan} className="rounded bg-stone-900 px-4 py-2 text-white dark:bg-stone-100 dark:text-stone-900">
             📷 Scan QR
           </button>
         ) : (
-          <button onClick={stopScan} className="rounded border border-stone-300 px-4 py-2">
+          <button onClick={stopScan} className="rounded border border-stone-300 px-4 py-2 dark:border-stone-700">
             Stop
           </button>
         )}
@@ -137,16 +137,16 @@ export default function ScanPage() {
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="1. Station (rotating QR)">
           {station ? (
-            <span className="text-emerald-700">
+            <span className="text-emerald-700 dark:text-emerald-400">
               {stageMeta?.icon} {stageMeta?.label} · <span className="font-mono">{station.c}</span>
             </span>
           ) : (
-            <span className="text-stone-400">not scanned</span>
+            <span className="text-stone-400 dark:text-stone-500">not scanned</span>
           )}
         </Field>
         <Field label="2. Product batch">
           <input
-            className="w-full rounded border border-stone-300 px-2 py-1 font-mono uppercase"
+            className="w-full rounded border border-stone-300 bg-white px-2 py-1 font-mono uppercase text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
             placeholder="scan or type ID"
             value={batchId}
             onChange={(e) => setBatchId(e.target.value.toUpperCase())}
@@ -166,13 +166,13 @@ export default function ScanPage() {
         </Field>
         <Field label="4. Details">
           <input
-            className="mb-1 w-full rounded border border-stone-300 px-2 py-1"
+            className="mb-1 w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
             placeholder="Your name / role"
             value={actor}
             onChange={(e) => setActor(e.target.value)}
           />
           <input
-            className="w-full rounded border border-stone-300 px-2 py-1"
+            className="w-full rounded border border-stone-300 bg-white px-2 py-1 text-stone-900 placeholder:text-stone-400 dark:border-stone-700 dark:bg-stone-950 dark:text-stone-100 dark:placeholder:text-stone-500"
             placeholder="Note (temp 4°C, lot, etc.)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
@@ -189,12 +189,12 @@ export default function ScanPage() {
       </button>
 
       {msg && (
-        <p className={`rounded p-3 text-sm ${msg.ok ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}>
+        <p className={`rounded p-3 text-sm ${msg.ok ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300"}`}>
           {msg.text}
         </p>
       )}
       {batchId && (
-        <Link href={`/verify/${batchId}`} className="block text-sm text-emerald-700 underline">
+        <Link href={`/verify/${batchId}`} className="block text-sm text-emerald-700 underline dark:text-emerald-400">
           View batch {batchId}
         </Link>
       )}
@@ -204,8 +204,8 @@ export default function ScanPage() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-3 text-sm">
-      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500">{label}</div>
+    <div className="rounded-lg border border-stone-200 bg-white p-3 text-sm dark:border-stone-800 dark:bg-stone-900">
+      <div className="mb-1 text-xs font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400">{label}</div>
       {children}
     </div>
   );
