@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createHash, randomBytes } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { UPLOAD_DIR, getBatch, insertStage, lastStage } from "@/lib/db";
+import { UPLOAD_DIR, getBatch, insertStage, lastStage, snapshotOrgForStage } from "@/lib/db";
 import { nextAllowedStage, stageById } from "@/lib/stages";
 import { verifyStationCode } from "@/lib/totp";
 import { recordStageOnChain } from "@/lib/solana";
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   if (!(photo instanceof File) || photo.size === 0) {
     return NextResponse.json({ error: "photo required" }, { status: 400 });
   }
-  const batch = getBatch(batchId);
+  const batch = await getBatch(batchId);
   if (!batch) {
     return NextResponse.json({ error: "unknown batch" }, { status: 404 });
   }
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
       { status: 401 },
     );
   }
-  const expected = nextAllowedStage(lastStage(batchId));
+  const expected = nextAllowedStage(await lastStage(batchId));
   if (expected !== stage) {
     return NextResponse.json(
       {
@@ -67,6 +67,9 @@ export async function POST(req: Request) {
   const ext = photo.type === "image/png" ? "png" : "jpg";
   const photoFile = `${batchId}-s${stage}-${randomBytes(3).toString("hex")}.${ext}`;
   const ts = Date.now();
+  const orgSnapshot = snapshotOrgForStage(org);
+  const orgSnapshotJson = JSON.stringify(orgSnapshot);
+  const snapshotHash = createHash("sha256").update(orgSnapshotJson).digest("hex");
 
   try {
     const { signature } = await recordStageOnChain({
@@ -75,6 +78,7 @@ export async function POST(req: Request) {
       photoHash,
       ts,
       actor,
+      snapshotHash,
     });
     writeFileSync(path.join(UPLOAD_DIR, photoFile), bytes);
     const row = {
@@ -87,8 +91,9 @@ export async function POST(req: Request) {
       tx_sig: signature,
       created_at: ts,
       actor_org_id: org.id,
+      org_snapshot: orgSnapshotJson,
     };
-    insertStage(row);
+    await insertStage(row);
     return NextResponse.json({ stage: row }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -57,6 +57,9 @@ export default function ScanPage() {
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [note, setNote] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [validation, setValidation] = useState<{ matches: boolean; reasoning: string } | { error: string } | null>(null);
+  const [photoConfirmed, setPhotoConfirmed] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [cameraEnabled, setCameraEnabled] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -211,6 +214,32 @@ export default function ScanPage() {
   function onPhoto(f: File | null) {
     setPhoto(f);
     setPreview(f ? URL.createObjectURL(f) : "");
+    // A retake makes any prior verdict stale — it was about the old photo.
+    setValidation(null);
+    setPhotoConfirmed(false);
+  }
+
+  /** Asks Gemini (via OpenRouter) whether the photo plausibly shows the
+   * claimed produce. A pass unlocks "Confirm Upload", which is required
+   * before Submit stage. */
+  async function validatePhoto() {
+    if (!photo) return;
+    const produceName = batches.find((b) => b.id === batchId)?.name ?? batchId;
+    setValidating(true);
+    setValidation(null);
+    const fd = new FormData();
+    fd.set("photo", photo);
+    fd.set("produceName", produceName);
+    try {
+      const r = await fetch("/api/validate-photo", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? r.statusText);
+      setValidation(j);
+    } catch (e) {
+      setValidation({ error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setValidating(false);
+    }
   }
 
   function startOver() {
@@ -224,7 +253,7 @@ export default function ScanPage() {
   }
 
   async function submit() {
-    if (!station || !batchId || !photo) return;
+    if (!station || !batchId || !photo || !photoConfirmed) return;
     setBusy(true);
     setMsg(null);
     const fd = new FormData();
@@ -367,30 +396,75 @@ export default function ScanPage() {
           <div className="rounded-lg border border-cream-300 bg-cream-50 p-3 text-sm dark:border-olive-700 dark:bg-olive-800">
             <b>{stageMeta?.label}</b> · batch <span className="font-mono">{batchId}</span>
           </div>
-          <label className="relative block w-full cursor-pointer overflow-hidden rounded-xl transition-transform active:scale-[0.98]">
-            {preview ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={preview} alt="preview" className="max-h-64 w-full rounded-xl object-cover" />
-            ) : (
-              <div className="flex h-48 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-cream-400 dark:border-olive-600">
-                <CameraIcon className="h-10 w-10 text-cream-500 dark:text-cream-600" />
-                <span className="text-sm text-cream-600 dark:text-cream-400">Tap to take a photo</span>
-              </div>
-            )}
-            {preview && (
-              <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-cream-100">
-                Retake photo
-              </span>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
-            />
-          </label>
+          <div
+            className={`aspect-square w-full overflow-hidden rounded-xl transition-shadow ${
+              validation && "matches" in validation
+                ? validation.matches
+                  ? "ring-4 ring-green-500"
+                  : "ring-4 ring-red-500"
+                : ""
+            }`}
+          >
+            <label className="relative block h-full w-full cursor-pointer transition-transform active:scale-[0.98]">
+              {preview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={preview} alt="preview" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full flex-col items-center justify-center gap-2 border-2 border-dashed border-cream-400 dark:border-olive-600">
+                  <CameraIcon className="h-10 w-10 text-cream-500 dark:text-cream-600" />
+                  <span className="text-sm text-cream-600 dark:text-cream-400">Tap to take a photo</span>
+                </div>
+              )}
+              {preview && (
+                <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-cream-100">
+                  Retake photo
+                </span>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={(e) => onPhoto(e.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
           <p className="text-center text-xs text-cream-600 dark:text-cream-400">The photo&apos;s hash goes on-chain.</p>
+          {validation && "error" in validation && (
+            <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950 dark:text-red-300">
+              Couldn&apos;t validate: {validation.error}
+            </p>
+          )}
+          {validation && "matches" in validation && (
+            <div
+              className={`rounded-lg p-3 text-sm ${
+                validation.matches
+                  ? "bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-300"
+                  : "bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-300"
+              }`}
+            >
+              <p className="font-medium">
+                {validation.matches ? "✓ Validation success" : "✗ Validation failed, please upload the correct photo"}
+              </p>
+              <p className="mt-0.5 opacity-80">{validation.reasoning}</p>
+            </div>
+          )}
+          {photo && (
+            <button
+              onClick={validatePhoto}
+              disabled={validating}
+              className="w-full rounded-full bg-forest-800 py-2.5 font-medium text-cream-100 transition-transform active:scale-95 disabled:opacity-50"
+            >
+              {validating ? "Checking with Gemini…" : "Validate"}
+            </button>
+          )}
+          <button
+            onClick={() => setPhotoConfirmed(true)}
+            disabled={!validation || !("matches" in validation) || !validation.matches || photoConfirmed}
+            className="w-full rounded-full bg-forest-800 py-2.5 font-medium text-cream-100 transition-transform active:scale-95 disabled:opacity-40"
+          >
+            {photoConfirmed ? "Upload confirmed ✓" : "Confirm Upload"}
+          </button>
           <input
             className="w-full rounded-full border border-cream-400 bg-cream-50 px-5 py-2.5 text-olive-900 placeholder:text-cream-600 dark:border-olive-600 dark:bg-olive-900 dark:text-cream-100"
             placeholder="Note (temp 4°C, lot, etc.)"
@@ -398,7 +472,7 @@ export default function ScanPage() {
             onChange={(e) => setNote(e.target.value)}
           />
           <button
-            disabled={!photo || busy}
+            disabled={!photo || !photoConfirmed || busy}
             onClick={submit}
             className="mt-auto w-full rounded-full bg-forest-800 py-3 font-medium text-cream-100 transition-transform active:scale-95 disabled:opacity-40"
           >

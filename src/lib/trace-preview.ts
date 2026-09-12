@@ -14,7 +14,14 @@ export type TraceData = {
     match: boolean;
     photoUrl?: string;
     txUrl?: string;
+    /** Map location captured for this stage. */
     location?: { lat: number; lng: number; label: string };
+    /** Acting org's location + role-specific fields at record time — see snapshotOrgForStage
+     * in lib/db.ts. Undefined for mock preview rows, which have nothing to snapshot. */
+    orgSnapshot?: Record<string, string | number>;
+    /** Whether orgSnapshot's hash matches the on-chain one; undefined when there's no on-chain
+     * snapshot hash to check against (stage recorded before this feature shipped). */
+    snapshotMatch?: boolean;
   }[];
 };
 
@@ -61,7 +68,7 @@ export function createTracePreview(id: string): TraceData {
       return {
         s, row: recorded ? { id: s.id, batch_id: "MOCK-DEMO", stage: s.id, photo_file: "", photo_hash: hash,
           note: failed ? `${notes[i]} Simulated integrity error: stored photo differs from the on-chain hash.` : notes[i],
-          actor: actors[i], tx_sig: "", created_at, actor_org_id: null } : undefined,
+          actor: actors[i], tx_sig: "", created_at, actor_org_id: null, org_snapshot: "{}" } : undefined,
         parsed, fileHash, match: recorded && !!parsed && fileHash === parsed.photoHash,
         photoUrl: recorded && !missingPhoto ? `data:image/svg+xml,${encodeURIComponent(svg)}` : undefined,
         location: recorded ? locations[i] : undefined,

@@ -10,10 +10,10 @@ export async function GET(
   ctx: { params: Promise<{ id: string }> },
 ) {
   const { id } = await ctx.params;
-  const batch = getBatch(id.toUpperCase());
+  const batch = await getBatch(id.toUpperCase());
   if (!batch) return NextResponse.json({ error: "not found" }, { status: 404 });
   const base = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
-  const stages = listStages(batch.id);
+  const stages = await listStages(batch.id);
   return NextResponse.json({
     name: `FoodTrace ${batch.name} #${batch.id}`,
     symbol: "FOOD",

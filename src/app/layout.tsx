@@ -25,8 +25,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col overflow-x-hidden bg-cream-200 text-olive-900 dark:bg-olive-900 dark:text-cream-100">
+      <body
+        className="min-h-full flex flex-col overflow-x-hidden bg-cream-200 text-olive-900 dark:bg-olive-900 dark:text-cream-100"
+        suppressHydrationWarning
+      >
         <SiteHeader />
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6">{children}</main>
       </body>

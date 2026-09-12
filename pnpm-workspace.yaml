@@ -1,3 +1,9 @@
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+
+onlyBuiltDependencies:
+  - bufferutil
+  - esbuild
+  - utf-8-validate
+  - workerd

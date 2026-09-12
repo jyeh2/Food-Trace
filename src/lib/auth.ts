@@ -51,7 +51,7 @@ export async function getSessionOrg(): Promise<OrgRow | null> {
   const jar = await cookies();
   const orgId = verifySessionToken(jar.get(SESSION_COOKIE)?.value);
   if (!orgId) return null;
-  const org = getOrgById(orgId);
+  const org = await getOrgById(orgId);
   if (!org || !org.active) return null;
   return org;
 }

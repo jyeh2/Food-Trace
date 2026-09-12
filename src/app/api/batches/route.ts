@@ -16,10 +16,12 @@ export async function GET() {
   if (!org) {
     return NextResponse.json({ error: "log in to view batches" }, { status: 401 });
   }
-  const batches = listBatches().map((b) => ({
-    ...b,
-    last_stage: lastStage(b.id),
-  }));
+  const batches = await Promise.all(
+    (await listBatches()).map(async (b) => ({
+      ...b,
+      last_stage: await lastStage(b.id),
+    })),
+  );
   return NextResponse.json({ batches });
 }
 
@@ -53,7 +55,7 @@ export async function POST(req: Request) {
       created_at: Date.now(),
       farmer_org_id: org.id,
     };
-    insertBatch(row);
+    await insertBatch(row);
     return NextResponse.json({ batch: row }, { status: 201 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
