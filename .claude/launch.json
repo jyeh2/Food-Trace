@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev-http",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["run", "dev:http"],
+      "port": 3000
+    }
+  ]
+}

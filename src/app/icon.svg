@@ -1,4 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect width="32" height="32" rx="7" fill="#ecfdf5"/>
-  <text x="16" y="23" font-size="20" text-anchor="middle">🥬</text>
+  <rect width="32" height="32" rx="8" fill="#1c4038"/>
+  <g transform="translate(4,4)">
+    <path d="M4 20c0-8 4-14 12-16-1 7-3 12-12 16Z" fill="#fefcf9"/>
+    <path d="M4 20c1-6 5-9 10-10" stroke="#1c4038" stroke-width="1.3" stroke-linecap="round" fill="none"/>
+  </g>
 </svg>
