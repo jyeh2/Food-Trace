@@ -5,11 +5,16 @@ export const runtime = "nodejs";
 
 // Routed through OpenRouter (OpenAI-compatible chat completions) rather than
 // calling Google directly, since the org's Gemini access now goes through an
-// OpenRouter key. max_tokens is capped low — without it, OpenRouter requests
-// the model's full max output (65536) up front and free-tier credits can't
-// cover that, even though the actual response is only a couple sentences.
+// OpenRouter key. max_tokens is capped — without it, OpenRouter requests the
+// model's full max output (65536) up front and free-tier credits can't cover
+// that, even though the actual response is only a couple sentences. Gemini's
+// hidden "thinking" tokens also count against max_tokens; this endpoint
+// requires reasoning to stay on (disabling it outright 400s), so its effort
+// is capped to "low" instead — otherwise a low max_tokens gets burned
+// entirely on thinking and the response comes back truncated mid-string
+// (invalid JSON).
 const MODEL = "google/gemini-3.6-flash";
-const MAX_TOKENS = 300;
+const MAX_TOKENS = 500;
 
 /** Uses a vision model (via OpenRouter) to check a stage photo actually shows
  * the claimed produce, since a photo hash alone only proves the file wasn't
@@ -59,6 +64,7 @@ export async function POST(req: Request) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_TOKENS,
+        reasoning: { effort: "low" },
         response_format: { type: "json_object" },
         messages: [
           {
